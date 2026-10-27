@@ -50,6 +50,8 @@ export default function Home() {
     } finally { setLoading(false); }
   }, []);
 
+  // This effect starts an asynchronous fetch; state updates occur only after the API responds.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function submitEvent(event: FormEvent<HTMLFormElement>) {
