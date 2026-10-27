@@ -70,7 +70,7 @@ export default function Home() {
       <header className="topbar">
         <Link className="brand" href="/" aria-label="CloudOps AI home">
           <span className="brand-mark">C</span><span>cloudops<span className="brand-muted">.ai</span></span>
-        </a>
+        </Link>
         <div className="topbar-right"><span className="live-dot" /> LOCAL DEVELOPMENT</div>
       </header>
 
