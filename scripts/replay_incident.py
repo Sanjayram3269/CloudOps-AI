@@ -27,7 +27,7 @@ def replay(scenario_path: Path) -> dict[str, Any]:
     incident = dict(scenario["incident"])
     incident["first_seen"] = min((item["occurred_at"] for item in visible), default=scenario["as_of"])
     incident["last_seen"] = max((item["occurred_at"] for item in visible), default=scenario["as_of"])
-    result = investigate(incident, visible)
+    result = investigate(incident, visible, allow_llm=False)
     visible_ids = {int(item["event_id"]) for item in visible}
     returned_ids = {
         int(value)
