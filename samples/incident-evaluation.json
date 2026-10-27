@@ -1,0 +1,13 @@
+{
+  "dataset": "cloudops-seeded-incident-cases",
+  "version": 1,
+  "purpose": "Regression fixtures for deterministic triage rules; not a production accuracy benchmark.",
+  "cases": [
+    {"id":"dependency-timeout","service":"checkout-api","message":"upstream request timeout after 30 seconds","expected_cause":"Dependency or downstream timeout"},
+    {"id":"connection-refused","service":"inventory-api","message":"connection refused while contacting inventory store","expected_cause":"Service connectivity or availability failure"},
+    {"id":"memory-pressure","service":"worker-api","message":"process killed: out of memory, container memory limit exceeded","expected_cause":"Memory pressure or process termination"},
+    {"id":"authorization","service":"identity-api","message":"permission denied while accessing customer record","expected_cause":"Authentication or authorization failure"},
+    {"id":"schema-mismatch","service":"orders-api","message":"database error: column does not exist after migration","expected_cause":"Database schema or migration mismatch"},
+    {"id":"unknown-pattern","service":"catalog-api","message":"unexpected application state while refreshing cache","expected_cause":"Unclassified application or infrastructure failure"}
+  ]
+}
