@@ -86,3 +86,32 @@ class InvestigationOut(BaseModel):
     hypotheses: list[HypothesisOut]
     evidence: list[EvidenceOut]
     limitations: list[str]
+
+
+
+class DeploymentOutcome(str, Enum):
+    started = "started"
+    succeeded = "succeeded"
+    failed = "failed"
+    rolled_back = "rolled_back"
+
+
+class DeploymentIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    service: str = Field(min_length=1, max_length=120)
+    environment: str = Field(default="production", min_length=1, max_length=80)
+    deployment_id: str = Field(min_length=1, max_length=128)
+    version: str | None = Field(default=None, max_length=128)
+    commit_sha: str | None = Field(default=None, max_length=128)
+    actor: str | None = Field(default=None, max_length=120)
+    outcome: DeploymentOutcome = DeploymentOutcome.succeeded
+    deployed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("deployed_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("deployed_at must include a timezone")
+        return value
