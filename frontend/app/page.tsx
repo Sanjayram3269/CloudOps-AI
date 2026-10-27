@@ -9,6 +9,12 @@ type Incident = {
   status: "open" | "investigating" | "resolved";
   first_seen: string; last_seen: string; event_count: number;
 };
+type Investigation = {
+  method: string;
+  summary: string;
+  hypotheses: { cause: string; confidence: number; rationale: string; evidence_event_ids: number[]; next_checks: string[] }[];
+  limitations: string[];
+};
 type ApiResult = { items: Incident[]; count: number };
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -26,6 +32,9 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("upstream request timeout after 30 seconds");
+  const [investigations, setInvestigations] = useState<Record<number, Investigation>>({});
+  const [actionBusy, setActionBusy] = useState<number | null>(null);
+  const [issueNotice, setIssueNotice] = useState<{ number: number; url: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -61,6 +70,33 @@ export default function Home() {
     } finally { setBusy(false); }
   }
 
+  async function runInvestigation(incidentId: number) {
+    setActionBusy(incidentId);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/incidents/${incidentId}/investigate`, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "Investigation failed.");
+      setInvestigations((current) => ({ ...current, [incidentId]: body as Investigation }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Investigation failed.");
+    } finally { setActionBusy(null); }
+  }
+
+  async function createIssue(incidentId: number) {
+    setActionBusy(incidentId);
+    setError("");
+    setIssueNotice(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/incidents/${incidentId}/github-issue`, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "GitHub issue creation failed.");
+      setIssueNotice({ number: body.issue_number, url: body.issue_url });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "GitHub issue creation failed.");
+    } finally { setActionBusy(null); }
+  }
+
   const openCount = items.filter((item) => item.status === "open").length;
   const investigatingCount = items.filter((item) => item.status === "investigating").length;
   const criticalCount = items.filter((item) => item.severity === "critical").length;
@@ -78,7 +114,7 @@ export default function Home() {
         <div className="eyebrow"><span className="eyebrow-line" /> INCIDENT INTELLIGENCE</div>
         <h1>From noisy alerts<br /><span>to clear evidence.</span></h1>
         <p className="hero-copy">A focused workspace for correlating production signals, tracking incidents, and investigating what might have gone wrong.</p>
-        <div className="hero-note"><span className="note-icon">↳</span> This MVP uses deterministic, evidence-linked triage heuristics—not an LLM-generated root cause yet.</div>
+        <div className="hero-note"><span className="note-icon">↳</span> Evidence-linked triage with deterministic fallback and optional LLM hypotheses.</div>
       </section>
 
       <section className="metrics" aria-label="Incident summary">
@@ -95,6 +131,7 @@ export default function Home() {
             <span className="count-pill">{items.length} total</span>
           </div>
           {error && <div className="error-banner" role="alert">{error}</div>}
+          {issueNotice && <div className="success-banner">GitHub issue #{issueNotice.number} ready. <a href={issueNotice.url} target="_blank" rel="noreferrer">Open issue ↗</a></div>}
           {loading ? <div className="empty-state">Loading incident queue…</div> :
             items.length === 0 ? (
               <div className="empty-state"><div className="empty-symbol">⌁</div><strong>No incidents yet</strong><span>Send a sample event to create your first incident.</span></div>
@@ -106,6 +143,25 @@ export default function Home() {
                     <div className="incident-main">
                       <div className="incident-title">{incident.title}</div>
                       <div className="incident-meta"><span>{incident.service}</span><span className="meta-dot">·</span><span>{incident.environment}</span><span className="meta-dot">·</span><span>{timeAgo(incident.last_seen)}</span></div>
+                      <div className="row-actions">
+                        <button className="mini-button" onClick={() => void runInvestigation(incident.id)} disabled={actionBusy !== null}>{actionBusy === incident.id ? "Working…" : "Investigate"}</button>
+                        <button className="mini-button mini-button-secondary" onClick={() => void createIssue(incident.id)} disabled={actionBusy !== null}>Create GitHub issue</button>
+                      </div>
+                      {investigations[incident.id] && (
+                        <div className="investigation-result">
+                          <div className="investigation-heading">{investigations[incident.id].method}</div>
+                          <p>{investigations[incident.id].summary}</p>
+                          {investigations[incident.id].hypotheses.map((hypothesis, index) => (
+                            <div className="hypothesis" key={`${incident.id}-${index}`}>
+                              <strong>{hypothesis.cause}</strong>
+                              <span className="hypothesis-score">score {hypothesis.confidence.toFixed(2)} · evidence {hypothesis.evidence_event_ids.map((id) => `#${id}`).join(", ")}</span>
+                              <p>{hypothesis.rationale}</p>
+                              <ul>{hypothesis.next_checks.map((check) => <li key={check}>{check}</li>)}</ul>
+                            </div>
+                          ))}
+                          {investigations[incident.id].limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
+                        </div>
+                      )}
                     </div>
                     <div className="incident-right">
                       <span className={`severity-tag severity-tag-${incident.severity}`}>{incident.severity}</span>
