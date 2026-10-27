@@ -10,14 +10,16 @@ CloudOps AI is an early-stage incident intelligence platform focused on turning 
 ## What works today
 
 - **Event ingestion API** with Pydantic validation, timezone-aware timestamps, severity, service, environment, trace/deployment identifiers, and attributes.
+- **OTLP/HTTP JSON logs ingestion** at `/v1/logs` (plus a namespaced alias), mapping OpenTelemetry resource, scope, severity, timestamp, trace, and attribute fields into the normal correlation pipeline. Requests are capped at 500 records.
 - **Deterministic event fingerprinting** that normalizes common high-cardinality values before hashing.
 - **Incident grouping** for matching events from the same service and environment inside a configurable time window.
 - **Incident lifecycle** with open, investigating, and resolved states.
 - **Evidence retention** that links ingested events to their incident and keeps timestamps and trace/deployment context.
 - **Evidence-linked investigation** with deterministic fallback heuristics and optional OpenAI-powered hypotheses. Model-supplied evidence IDs are validated against stored events; LLM conclusions remain unverified.
-- **Next.js dashboard** showing incident counts and queue details, with a form to send sample events.
+- **Next.js dashboard** showing incident counts and queue details, with a sample-event form, an evidence timeline, and trace/deployment context.
 - **Docker Compose setup** for local API and web development.
 - **Optional GitHub issue creation** using an explicitly configured token and repository, with incident markers to reuse an existing issue on repeat requests.
+- **Seeded evaluation harness** that runs labelled deterministic-triage regression cases and reports Top-1/Top-3 fixture agreement. This is a regression check, not a production root-cause accuracy claim.
 - **Backend tests and GitHub Actions CI** for core API flows.
 
 ## Product direction
@@ -51,7 +53,9 @@ The current vertical slice is intentionally small and runnable. The broader targ
 | API | Python, FastAPI, Pydantic | Authenticated ingestion and integration adapters |
 | Persistence | SQLite for local MVP | PostgreSQL for multi-user deployment |
 | Correlation | Deterministic message fingerprint + service/environment + time window | Trace, deployment, topology, and semantic correlation |
-| Investigation | Deterministic message-pattern baseline with linked evidence IDs | Provider-agnostic LLM investigation with schema validation and counter-evidence |
+| Investigation | Deterministic message-pattern baseline and optional OpenAI adapter with linked evidence IDs | Provider-neutral investigation, counter-evidence, and measured calibration |
+| Telemetry intake | CloudOps event JSON + OTLP/HTTP JSON logs | Collector deployment and traces/metrics ingestion |
+| Evaluation | Six labelled synthetic regression fixtures | Versioned incident replay with time-cutoff enforcement and broader ground-truth datasets |
 | Web | Next.js, React, TypeScript | Incident details, timeline, evidence and evaluation views |
 | Local runtime | Docker Compose | Hardened cloud deployment |
 | CI | GitHub Actions, pytest | Frontend build, security checks and broader integration tests |
@@ -152,6 +156,34 @@ curl -X PATCH http://localhost:8000/api/v1/incidents/1/status \
 
 Use the incident ID returned by your own API response instead of assuming it is 1.
 
+### Send OpenTelemetry logs (OTLP/HTTP JSON)
+
+OpenTelemetry exporters commonly send an `ExportLogsServiceRequest` JSON body to `/v1/logs`. CloudOps AI also exposes `/api/v1/telemetry/otlp/v1/logs` as a namespaced alias.
+
+~~~bash
+curl -X POST http://localhost:8000/v1/logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resourceLogs": [{
+      "resource": {"attributes": [
+        {"key": "service.name", "value": {"stringValue": "checkout-api"}},
+        {"key": "deployment.environment.name", "value": {"stringValue": "demo"}}
+      ]},
+      "scopeLogs": [{
+        "logRecords": [{
+          "timeUnixNano": "1767225600000000000",
+          "severityNumber": 17,
+          "severityText": "ERROR",
+          "body": {"stringValue": "upstream request timeout after 30 seconds"},
+          "traceId": "0123456789abcdef0123456789abcdef"
+        }]
+      }]
+    }]
+  }'
+~~~
+
+The endpoint returns accepted-record counts and the incident IDs assigned by the normal correlation engine. The adapter currently supports OTLP JSON logs, not OTLP protobuf, traces, or metrics.
+
 ## API endpoints
 
 | Method | Endpoint | Purpose |
@@ -177,6 +209,17 @@ Copy .env.example to .env if you want to keep local settings in one place. Envir
 
 OPENAI_API_KEY enables optional LLM-assisted investigation; OPENAI_MODEL defaults to gpt-4.1-mini. Without a key, the API uses deterministic heuristics. GITHUB_TOKEN and GITHUB_REPOSITORY (owner/repo) enable optional issue creation. Never commit real credentials. The API currently has no authentication, so keep it local; do not expose configured write credentials on a public instance.
 
+## Baseline evaluation
+
+Run the labelled synthetic regression set:
+
+~~~bash
+python scripts/evaluate_baseline.py
+python scripts/evaluate_baseline.py --output artifacts/baseline-evaluation.json --min-top1 1.0
+~~~
+
+The report measures Top-1 and Top-3 agreement for six hand-labelled fixtures that exercise the current deterministic rules. These scores only verify that known rules still behave as expected on this small synthetic dataset. They are **not** estimates of real-world root-cause accuracy. A meaningful benchmark needs diverse labelled incidents, temporal replay, and blind evaluation.
+
 ## Tests
 
 From the repository root:
@@ -195,13 +238,17 @@ The current tests cover health, event validation, event correlation, service iso
 - [x] Deterministic fingerprints and time-window incident grouping
 - [x] Persist events and incidents locally
 - [x] Incident queue UI and sample-event form
-- [x] Evidence-linked deterministic triage endpoint
+- [x] Evidence-linked triage endpoint with deterministic fallback and optional LLM adapter
+- [x] OTLP/HTTP JSON logs ingestion with bounded record count and metadata mapping
+- [x] Incident evidence timeline in the dashboard
+- [x] Seeded baseline regression evaluator
 - [x] Backend tests and CI workflow
 - [ ] Incident detail view with timeline and investigation output in the UI
 - [ ] Improve event deduplication semantics and add explicit correlation explanations
 
 ### Phase 2 — Context-aware investigation
-- [ ] OpenTelemetry-compatible logs/traces/metrics ingestion
+- [x] OpenTelemetry-compatible OTLP/HTTP JSON log ingestion
+- [ ] Collector example, traces/metrics ingestion, and protobuf transport
 - [ ] Deployment and GitHub commit metadata
 - [ ] Service/dependency context and evidence graph
 - [ ] Provider-agnostic LLM adapter with schema-validated outputs
@@ -209,7 +256,8 @@ The current tests cover health, event validation, event correlation, service iso
 
 ### Phase 3 — Integrations and evaluation
 - [ ] GitHub issue creation with idempotency and reviewable evidence
-- [ ] Seeded incident scenarios and replay without future-data leakage
+- [x] Seeded deterministic-triage regression scenarios
+- [ ] Full incident replay with time-cutoff enforcement and no future-data leakage
 - [ ] Root-cause Top-1/Top-3, evidence quality, grouping, latency, and cost metrics
 - [ ] Multi-tenant authentication, authorization, audit trails, rate limits, and secret redaction
 - [ ] AWS deployment and operational runbooks
