@@ -26,7 +26,7 @@ This is an early-stage checklist, not a completed security review.
 | Sensitive values in event messages | Not automatically redacted | Redaction pipeline, configurable retention, restricted access |
 | Public exposure of API | No production perimeter | TLS, ingress policy, authentication, monitoring, abuse controls |
 | SQLite durability/concurrency limits | Local-only storage | Managed PostgreSQL, backups, migration and recovery testing |
-| Model prompt injection via logs | No model call in MVP | Treat logs as untrusted data; isolate instructions, constrain tools, validate outputs |
+| Model prompt injection via logs | Optional LLM receives untrusted log text as data; no tools are exposed | Keep logs clearly delimited as untrusted evidence, constrain outputs, validate cited evidence IDs, and test adversarial payloads |
 | Unauthorized GitHub actions | GitHub integration not implemented | Least-privilege tokens, explicit approval, idempotency, audit records |
 | Misleading root-cause confidence | Heuristic scores only | Label scores accurately; benchmark and calibrate before making accuracy claims |
 
