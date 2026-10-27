@@ -25,8 +25,8 @@ The MVP intentionally prioritizes a reproducible path from an event to a visible
 ### Evidence model
 Introduce stable evidence records for logs, traces, metrics, deployment events, source revisions, runbooks, and historical incidents. Each record should preserve source, timestamp, tenant, service, and retrieval metadata.
 
-### Investigation engine
-Use a provider adapter for model access, schema-validated responses, and strict evidence-ID validation. The model should propose competing hypotheses and targeted follow-up checks, while deterministic code enforces access control, evidence provenance, and allowed side effects.
+### Investigation engine (partial)
+An optional OpenAI adapter is available when OPENAI_API_KEY is configured. The current adapter sends incident metadata and a bounded set of stored events, requests JSON hypotheses, and rejects hypotheses that do not cite valid stored event IDs. If the provider fails, the API falls back to deterministic heuristics. The model does not yet query metrics, traces, deployment history, or service topology. Next steps include a provider-neutral interface, richer schema validation, counter-evidence, and reproducible model evaluation.
 
 ### Evaluation
 Create labelled, seeded incident scenarios and replay them with a time cutoff. The investigator must not see events or deployment data that arrived after the simulated investigation time. Publish the scenario version, baseline, trial count, metric definitions, and known limitations with any score.
