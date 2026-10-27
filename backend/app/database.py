@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -61,6 +62,21 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_events_incident_time
                 ON events(incident_id, occurred_at DESC);
+            CREATE TABLE IF NOT EXISTS deployments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                deployment_id TEXT NOT NULL,
+                version TEXT,
+                commit_sha TEXT,
+                actor TEXT,
+                outcome TEXT NOT NULL DEFAULT 'succeeded',
+                deployed_at TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE(service, environment, deployment_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_deployments_service_time
+                ON deployments(service, environment, deployed_at DESC);
             """
         )
         columns = {row["name"] for row in db.execute("PRAGMA table_info(incidents)")}
@@ -185,3 +201,62 @@ def save_github_issue(incident_id: int, url: str, number: int) -> dict[str, Any]
         )
         row = db.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone()
         return row_dict(row)
+
+
+
+def record_deployment(deployment: dict[str, Any]) -> dict[str, Any]:
+    """Upsert a deployment record using its service/environment/deployment ID."""
+    metadata_json = json.dumps(deployment.get("metadata", {}), sort_keys=True)
+    with connect() as db:
+        db.execute(
+            """INSERT INTO deployments
+               (service, environment, deployment_id, version, commit_sha, actor,
+                outcome, deployed_at, metadata_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(service, environment, deployment_id) DO UPDATE SET
+                 version = excluded.version,
+                 commit_sha = excluded.commit_sha,
+                 actor = excluded.actor,
+                 outcome = excluded.outcome,
+                 deployed_at = excluded.deployed_at,
+                 metadata_json = excluded.metadata_json""",
+            (
+                deployment["service"], deployment["environment"], deployment["deployment_id"],
+                deployment.get("version"), deployment.get("commit_sha"), deployment.get("actor"),
+                deployment["outcome"], deployment["deployed_at"], metadata_json,
+            ),
+        )
+        row = db.execute(
+            """SELECT * FROM deployments
+               WHERE service = ? AND environment = ? AND deployment_id = ?""",
+            (deployment["service"], deployment["environment"], deployment["deployment_id"]),
+        ).fetchone()
+        result = row_dict(row)
+        assert result is not None
+        result["metadata"] = json.loads(result.pop("metadata_json"))
+        return result
+
+
+def get_related_deployments(incident_id: int, *, before_seconds: int = 3600,
+                            after_seconds: int = 300) -> list[dict[str, Any]]:
+    """Return deployments near an incident start, without implying causality."""
+    incident = get_incident(incident_id)
+    if incident is None:
+        return []
+    first_seen = datetime.fromisoformat(incident["first_seen"])
+    lower = first_seen - timedelta(seconds=max(0, before_seconds))
+    upper = first_seen + timedelta(seconds=max(0, after_seconds))
+    with connect() as db:
+        rows = db.execute(
+            """SELECT * FROM deployments WHERE service = ? AND environment = ?
+               ORDER BY deployed_at DESC LIMIT 200""",
+            (incident["service"], incident["environment"]),
+        ).fetchall()
+    related = []
+    for row in rows:
+        item = dict(row)
+        deployed_at = datetime.fromisoformat(item["deployed_at"])
+        if lower <= deployed_at <= upper:
+            item["metadata"] = json.loads(item.pop("metadata_json"))
+            related.append(item)
+    return sorted(related, key=lambda item: item["deployed_at"])
