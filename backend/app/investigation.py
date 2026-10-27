@@ -44,9 +44,9 @@ PATTERNS: list[tuple[tuple[str, ...], str, str, list[str]]] = [
 ]
 
 
-def investigate(incident: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Use the configured LLM when available; otherwise use deterministic triage."""
-    if os.getenv("OPENAI_API_KEY") and events:
+def investigate(incident: dict[str, Any], events: list[dict[str, Any]], *, allow_llm: bool = True) -> dict[str, Any]:
+    """Use the configured LLM when allowed; otherwise use deterministic triage."""
+    if allow_llm and os.getenv("OPENAI_API_KEY") and events:
         try:
             from backend.app.llm_investigation import investigate_with_llm
             result = investigate_with_llm(incident, events)
