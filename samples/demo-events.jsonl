@@ -1,0 +1,3 @@
+{"service":"checkout-api","environment":"demo","severity":"error","message":"upstream request timeout after 30 seconds","trace_id":"trace-demo-001","attributes":{"source":"sample","case":"dependency-timeout"}}
+{"service":"checkout-api","environment":"demo","severity":"critical","message":"upstream request timeout after 45 seconds","trace_id":"trace-demo-002","attributes":{"source":"sample","case":"dependency-timeout"}}
+{"service":"inventory-api","environment":"demo","severity":"warning","message":"connection refused while contacting inventory store","trace_id":"trace-demo-003","attributes":{"source":"sample","case":"connection-refused"}}
