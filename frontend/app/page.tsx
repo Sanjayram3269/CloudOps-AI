@@ -35,6 +35,8 @@ export default function Home() {
   const [investigations, setInvestigations] = useState<Record<number, Investigation>>({});
   const [actionBusy, setActionBusy] = useState<number | null>(null);
   const [issueNotice, setIssueNotice] = useState<{ number: number; url: string } | null>(null);
+  const [timelines, setTimelines] = useState<Record<number, { evidence: { event_id: number; occurred_at: string; service: string; severity: string; message: string; trace_id?: string | null; deployment_id?: string | null }[] }>>({});
+  const [timelineBusy, setTimelineBusy] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -81,6 +83,19 @@ export default function Home() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Investigation failed.");
     } finally { setActionBusy(null); }
+  }
+
+  async function loadTimeline(incidentId: number) {
+    setTimelineBusy(incidentId);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/incidents/${incidentId}`, { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "Could not load incident evidence.");
+      setTimelines((current) => ({ ...current, [incidentId]: body }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load incident evidence.");
+    } finally { setTimelineBusy(null); }
   }
 
   async function createIssue(incidentId: number) {
@@ -145,8 +160,22 @@ export default function Home() {
                       <div className="incident-meta"><span>{incident.service}</span><span className="meta-dot">·</span><span>{incident.environment}</span><span className="meta-dot">·</span><span>{timeAgo(incident.last_seen)}</span></div>
                       <div className="row-actions">
                         <button className="mini-button" onClick={() => void runInvestigation(incident.id)} disabled={actionBusy !== null}>{actionBusy === incident.id ? "Working…" : "Investigate"}</button>
+                        <button className="mini-button mini-button-secondary" onClick={() => void loadTimeline(incident.id)} disabled={timelineBusy !== null}>{timelineBusy === incident.id ? "Loading…" : timelines[incident.id] ? "Refresh timeline" : "Evidence timeline"}</button>
                         <button className="mini-button mini-button-secondary" onClick={() => void createIssue(incident.id)} disabled={actionBusy !== null}>Create GitHub issue</button>
                       </div>
+                      {timelines[incident.id] && (
+                        <div className="timeline-result">
+                          <div className="investigation-heading">EVENT EVIDENCE TIMELINE · {timelines[incident.id].evidence.length} records</div>
+                          {timelines[incident.id].evidence.map((item) => (
+                            <div className="timeline-event" key={item.event_id}>
+                              <span className="timeline-time">{new Date(item.occurred_at).toLocaleString()}</span>
+                              <span className={`severity-tag severity-tag-${item.severity}`}>{item.severity}</span>
+                              <p>{item.message}</p>
+                              <div className="timeline-meta">Event #{item.event_id}{item.trace_id ? ` · trace ${item.trace_id}` : ""}{item.deployment_id ? ` · deployment ${item.deployment_id}` : ""}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {investigations[incident.id] && (
                         <div className="investigation-result">
                           <div className="investigation-heading">{investigations[incident.id].method}</div>
