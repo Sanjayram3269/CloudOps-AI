@@ -105,3 +105,10 @@ textarea:focus { border-color: #718e45; box-shadow: 0 0 0 2px rgba(199,243,107,.
 .timeline-time { color: #9ba6b3; font: 9px 'DM Mono',monospace; display: inline-block; margin-right: 9px; margin-bottom: 7px; }
 .timeline-event p { color: #d9e0e8; font-size: 11px; line-height: 1.6; margin: 7px 0; overflow-wrap: anywhere; }
 .timeline-meta { color: #778391; font: 9px 'DM Mono',monospace; overflow-wrap: anywhere; }
+
+
+.deployment-context { margin-top: 13px; padding-top: 12px; border-top: 1px solid #3a3329; }
+.deployment-event { padding: 10px 0; border-bottom: 1px solid #292f38; }
+.deployment-event:last-child { border-bottom: 0; }
+.deployment-event strong { display: block; color: #f0c47d; font: 11px 'DM Mono',monospace; overflow-wrap: anywhere; }
+.deployment-event .timeline-meta { margin-top: 6px; }
