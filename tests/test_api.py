@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 from backend.app import database
+from backend.app.github_issues import redact_message
 
 
 def event(message: str = "upstream request timeout after 30 seconds", **overrides):
@@ -103,3 +104,13 @@ def test_github_issue_endpoint_requires_explicit_configuration(tmp_path, monkeyp
             f"/api/v1/incidents/{created.json()['incident_id']}/github-issue"
         )
         assert response.status_code == 503
+
+
+
+def test_github_issue_redaction_removes_bearer_and_key_values():
+    message = "Authorization: Bearer top-secret-token api_key=abc123 password=hunter2"
+    redacted = redact_message(message)
+    assert "top-secret-token" not in redacted
+    assert "abc123" not in redacted
+    assert "hunter2" not in redacted
+    assert "[REDACTED]" in redacted
