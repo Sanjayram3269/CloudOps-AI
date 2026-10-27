@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Incident = {
@@ -67,7 +68,7 @@ export default function Home() {
   return (
     <main className="shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="CloudOps AI home">
+        <Link className="brand" href="/" aria-label="CloudOps AI home">
           <span className="brand-mark">C</span><span>cloudops<span className="brand-muted">.ai</span></span>
         </a>
         <div className="topbar-right"><span className="live-dot" /> LOCAL DEVELOPMENT</div>
