@@ -53,7 +53,7 @@ The current vertical slice is intentionally small and runnable. The broader targ
 |---|---|---|
 | API | Python, FastAPI, Pydantic | Authenticated ingestion and integration adapters |
 | Persistence | SQLite for local MVP | PostgreSQL for multi-user deployment |
-| Correlation | Deterministic message fingerprint + service/environment + time window | Trace, deployment, topology, and semantic correlation |
+| Correlation | Deterministic message fingerprint + service/environment + time window; nearby deployment context by service/environment/time | Trace, topology, and semantic correlation |
 | Investigation | Deterministic message-pattern baseline and optional OpenAI adapter with linked evidence IDs | Provider-neutral investigation, counter-evidence, and measured calibration |
 | Telemetry intake | CloudOps event JSON + OTLP/HTTP JSON logs | Collector deployment and traces/metrics ingestion |
 | Evaluation | Six labelled synthetic regression fixtures | Versioned incident replay with time-cutoff enforcement and broader ground-truth datasets |
@@ -185,6 +185,26 @@ curl -X POST http://localhost:8000/v1/logs \
 
 The endpoint returns accepted-record counts and the incident IDs assigned by the normal correlation engine. The adapter currently supports OTLP JSON logs, not OTLP protobuf, traces, or metrics. An optional Collector pipeline example is in `examples/otel-collector.yaml`; its `api:8000` endpoint assumes the collector joins the same Compose network as the API.
 
+### Record a deployment
+
+~~~bash
+curl -X POST http://localhost:8000/api/v1/deployments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service": "checkout-api",
+    "environment": "demo",
+    "deployment_id": "deploy-2026-10-28-01",
+    "version": "1.4.2",
+    "commit_sha": "abc123def456",
+    "actor": "github-actions",
+    "outcome": "succeeded",
+    "deployed_at": "2026-10-28T12:00:00Z",
+    "metadata": {"pipeline": "release"}
+  }'
+~~~
+
+Incident details and investigations include matching deployments from the same service/environment within one hour before through five minutes after the incident's first event. This is temporal context only; it does not establish that a deployment caused the incident. Re-sending the same service/environment/deployment ID updates the existing deployment record.
+
 ## API endpoints
 
 | Method | Endpoint | Purpose |
@@ -254,19 +274,19 @@ The current tests cover health, event validation, event correlation, service iso
 - [x] Seeded baseline regression evaluator
 - [x] As-of incident replay with a future-evidence leakage check
 - [x] Backend tests and CI workflow
-- [ ] Incident detail view with timeline and investigation output in the UI
+- [x] Incident evidence timeline and investigation output in the dashboard queue
 - [ ] Improve event deduplication semantics and add explicit correlation explanations
 
 ### Phase 2 — Context-aware investigation
 - [x] OpenTelemetry-compatible OTLP/HTTP JSON log ingestion
 - [ ] Collector example, traces/metrics ingestion, and protobuf transport
-- [ ] Deployment and GitHub commit metadata
+- [x] Deployment event intake, commit SHA capture, and nearby deployment context
 - [ ] Service/dependency context and evidence graph
 - [ ] Provider-agnostic LLM adapter with schema-validated outputs
 - [ ] Multiple hypotheses, counter-evidence, and calibrated evaluation
 
 ### Phase 3 — Integrations and evaluation
-- [ ] GitHub issue creation with idempotency and reviewable evidence
+- [x] GitHub issue creation with incident-marker reuse and reviewable evidence
 - [x] Seeded deterministic-triage regression scenarios
 - [x] Single-scenario replay with a time cutoff and future-evidence leakage check
 - [ ] Broader multi-incident replay harness with richer ground truth and statistical reporting
