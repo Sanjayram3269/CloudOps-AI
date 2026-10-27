@@ -56,6 +56,11 @@ def init_db() -> None:
                 ON events(incident_id, occurred_at DESC);
             """
         )
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(incidents)")}
+        if "github_issue_url" not in columns:
+            db.execute("ALTER TABLE incidents ADD COLUMN github_issue_url TEXT")
+        if "github_issue_number" not in columns:
+            db.execute("ALTER TABLE incidents ADD COLUMN github_issue_number INTEGER")
 
 
 def row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
