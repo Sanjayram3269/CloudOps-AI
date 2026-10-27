@@ -211,3 +211,51 @@ def test_llm_redaction_removes_common_secret_values():
     assert "hunter2" not in redacted
     assert "abcdefghijklmnop" not in redacted
     assert redacted.count("[REDACTED]") >= 3
+
+
+
+def test_deployment_context_is_linked_to_incident(tmp_path, monkeypatch):
+    from datetime import timedelta
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "deployments.db"))
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        incident_id = created.json()["incident_id"]
+        deployed_at = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        deployment = {
+            "service": "checkout-api",
+            "environment": "test",
+            "deployment_id": "deploy-abc123",
+            "version": "1.4.2",
+            "commit_sha": "abc123def456",
+            "actor": "ci",
+            "outcome": "succeeded",
+            "deployed_at": deployed_at,
+            "metadata": {"pipeline": "github-actions"}
+        }
+        response = client.post("/api/v1/deployments", json=deployment)
+        assert response.status_code == 201
+        assert response.json()["deployment_id"] == "deploy-abc123"
+        incident = client.get(f"/api/v1/incidents/{incident_id}").json()
+        assert len(incident["related_deployments"]) == 1
+        assert incident["related_deployments"][0]["commit_sha"] == "abc123def456"
+        investigation = client.post(f"/api/v1/incidents/{incident_id}/investigate").json()
+        assert investigation["deployment_context"][0]["deployment_id"] == "deploy-abc123"
+
+
+def test_deployment_upsert_and_timezone_validation(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "deployment-upsert.db"))
+    database.init_db()
+    with TestClient(app) as client:
+        payload = {
+            "service": "checkout-api", "environment": "test",
+            "deployment_id": "deploy-repeat", "version": "1.0.0",
+            "outcome": "succeeded", "deployed_at": datetime.now(timezone.utc).isoformat()
+        }
+        first = client.post("/api/v1/deployments", json=payload)
+        payload["version"] = "1.0.1"
+        second = client.post("/api/v1/deployments", json=payload)
+        assert first.status_code == second.status_code == 201
+        assert second.json()["version"] == "1.0.1"
+        payload["deployed_at"] = "2026-10-28T12:00:00"
+        assert client.post("/api/v1/deployments", json=payload).status_code == 422
