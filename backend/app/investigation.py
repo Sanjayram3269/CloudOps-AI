@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 
 PATTERNS: list[tuple[tuple[str, ...], str, str, list[str]]] = [
@@ -44,7 +45,17 @@ PATTERNS: list[tuple[tuple[str, ...], str, str, list[str]]] = [
 
 
 def investigate(incident: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return conservative hypotheses whose evidence IDs point to stored events."""
+    """Use the configured LLM when available; otherwise use deterministic triage."""
+    if os.getenv("OPENAI_API_KEY") and events:
+        try:
+            from backend.app.llm_investigation import investigate_with_llm
+            result = investigate_with_llm(incident, events)
+            if result:
+                return result
+        except Exception:
+            # Provider failures must not take down the incident API. Fall back to
+            # deterministic, evidence-linked triage rather than inventing an answer.
+            pass
     if not events:
         return {
             "incident_id": incident["id"],
