@@ -20,6 +20,7 @@ CloudOps AI is an early-stage incident intelligence platform focused on turning 
 - **Docker Compose setup** for local API and web development.
 - **Optional GitHub issue creation** using an explicitly configured token and repository, with incident markers to reuse an existing issue on repeat requests.
 - **Seeded evaluation harness** that runs labelled deterministic-triage regression cases and reports Top-1/Top-3 fixture agreement. This is a regression check, not a production root-cause accuracy claim.
+- **Temporal incident replay** that applies an explicit investigation cutoff, withholds later events, and checks that returned evidence references do not include future event IDs.
 - **Backend tests and GitHub Actions CI** for core API flows.
 
 ## Product direction
@@ -220,6 +221,15 @@ python scripts/evaluate_baseline.py --output artifacts/baseline-evaluation.json 
 
 The report measures Top-1 and Top-3 agreement for six hand-labelled fixtures that exercise the current deterministic rules. These scores only verify that known rules still behave as expected on this small synthetic dataset. They are **not** estimates of real-world root-cause accuracy. A meaningful benchmark needs diverse labelled incidents, temporal replay, and blind evaluation.
 
+### Replay an incident as of a timestamp
+
+~~~bash
+python scripts/replay_incident.py
+python scripts/replay_incident.py --output artifacts/replay-report.json
+~~~
+
+The seeded scenario contains three events available at the investigation cutoff and one deliberately later event. The replay report shows which event IDs were visible, which were withheld, the resulting hypotheses, and whether future evidence leaked into the result. This is a temporal-correctness regression fixture—not a broad incident-reconstruction benchmark.
+
 ## Tests
 
 From the repository root:
@@ -242,6 +252,7 @@ The current tests cover health, event validation, event correlation, service iso
 - [x] OTLP/HTTP JSON logs ingestion with bounded record count and metadata mapping
 - [x] Incident evidence timeline in the dashboard
 - [x] Seeded baseline regression evaluator
+- [x] As-of incident replay with a future-evidence leakage check
 - [x] Backend tests and CI workflow
 - [ ] Incident detail view with timeline and investigation output in the UI
 - [ ] Improve event deduplication semantics and add explicit correlation explanations
@@ -257,7 +268,8 @@ The current tests cover health, event validation, event correlation, service iso
 ### Phase 3 — Integrations and evaluation
 - [ ] GitHub issue creation with idempotency and reviewable evidence
 - [x] Seeded deterministic-triage regression scenarios
-- [ ] Full incident replay with time-cutoff enforcement and no future-data leakage
+- [x] Single-scenario replay with a time cutoff and future-evidence leakage check
+- [ ] Broader multi-incident replay harness with richer ground truth and statistical reporting
 - [ ] Root-cause Top-1/Top-3, evidence quality, grouping, latency, and cost metrics
 - [ ] Multi-tenant authentication, authorization, audit trails, rate limits, and secret redaction
 - [ ] AWS deployment and operational runbooks
