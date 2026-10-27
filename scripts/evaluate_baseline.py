@@ -23,7 +23,7 @@ def evaluate(dataset_path: Path) -> dict[str, Any]:
         incident = {"id": index, "title": f"{case['service']}: seeded evaluation case",
                     "service": case["service"], "environment": "evaluation", "severity": "error",
                     "status": "open", "first_seen": timestamp, "last_seen": timestamp}
-        output = investigate(incident, [event])
+        output = investigate(incident, [event], allow_llm=False)
         ranked = [item["cause"] for item in output["hypotheses"]]
         top1 = bool(ranked and ranked[0] == case["expected_cause"])
         top3 = case["expected_cause"] in ranked[:3]
