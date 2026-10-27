@@ -182,7 +182,7 @@ curl -X POST http://localhost:8000/v1/logs \
   }'
 ~~~
 
-The endpoint returns accepted-record counts and the incident IDs assigned by the normal correlation engine. The adapter currently supports OTLP JSON logs, not OTLP protobuf, traces, or metrics.
+The endpoint returns accepted-record counts and the incident IDs assigned by the normal correlation engine. The adapter currently supports OTLP JSON logs, not OTLP protobuf, traces, or metrics. An optional Collector pipeline example is in `examples/otel-collector.yaml`; its `api:8000` endpoint assumes the collector joins the same Compose network as the API.
 
 ## API endpoints
 
