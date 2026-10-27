@@ -35,7 +35,7 @@ export default function Home() {
   const [investigations, setInvestigations] = useState<Record<number, Investigation>>({});
   const [actionBusy, setActionBusy] = useState<number | null>(null);
   const [issueNotice, setIssueNotice] = useState<{ number: number; url: string } | null>(null);
-  const [timelines, setTimelines] = useState<Record<number, { evidence: { event_id: number; occurred_at: string; service: string; severity: string; message: string; trace_id?: string | null; deployment_id?: string | null }[] }>>({});
+  const [timelines, setTimelines] = useState<Record<number, { evidence: { event_id: number; occurred_at: string; service: string; severity: string; message: string; trace_id?: string | null; deployment_id?: string | null }[]; related_deployments: { id: number; deployment_id: string; version?: string | null; commit_sha?: string | null; actor?: string | null; outcome: string; deployed_at: string }[] }>>({});
   const [timelineBusy, setTimelineBusy] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
@@ -176,6 +176,18 @@ export default function Home() {
                               <div className="timeline-meta">Event #{item.event_id}{item.trace_id ? ` · trace ${item.trace_id}` : ""}{item.deployment_id ? ` · deployment ${item.deployment_id}` : ""}</div>
                             </div>
                           ))}
+                          {timelines[incident.id].related_deployments.length > 0 && (
+                            <div className="deployment-context">
+                              <div className="investigation-heading">NEARBY DEPLOYMENTS · temporal context, not proof of cause</div>
+                              {timelines[incident.id].related_deployments.map((deployment) => (
+                                <div className="deployment-event" key={deployment.id}>
+                                  <strong>{deployment.deployment_id}</strong>
+                                  <span className="hypothesis-score">{deployment.outcome} · {new Date(deployment.deployed_at).toLocaleString()}</span>
+                                  <div className="timeline-meta">{deployment.version ? `version ${deployment.version}` : "version not supplied"}{deployment.commit_sha ? ` · commit ${deployment.commit_sha}` : ""}{deployment.actor ? ` · by ${deployment.actor}` : ""}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                       {investigations[incident.id] && (
