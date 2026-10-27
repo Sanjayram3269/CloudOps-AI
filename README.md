@@ -285,9 +285,9 @@ The current tests cover health, event validation, event correlation, service iso
 
 ## Security and limitations
 
-This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. Do not connect it to sensitive production telemetry or expose it to the public internet without adding authentication, authorization, retention controls, secret redaction, rate limits, audit coverage, and a security review.
+This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. The LLM adapter redacts several common credential assignment patterns before sending log text, but that is not a comprehensive secret or PII scrubber. Do not connect it to sensitive production telemetry or expose it to the public internet without authentication, authorization, robust redaction, retention controls, rate limits, audit coverage, and a security review.
 
-The deterministic fallback uses message-pattern heuristics. When enabled, the LLM receives only stored event messages and incident metadata; it does not inspect metrics, traces, deployments, source code, or external dependency state. Confidence values are heuristic/model-provided scores, not statistically calibrated probabilities. GitHub issue creation is an external side effect and must only be enabled in a trusted, authenticated environment.
+The deterministic fallback uses message-pattern heuristics. When enabled, the LLM receives redacted event messages and incident metadata; it does not inspect metrics, traces, deployments, source code, or external dependency state. Confidence values are heuristic/model-provided scores, not statistically calibrated probabilities. GitHub issue creation is an external side effect and must only be enabled in a trusted, authenticated environment.
 
 ## Contributing
 
