@@ -12,7 +12,7 @@ from backend.app import database
 
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _SECRET_RE = re.compile(
-    r"(?i)(api[_-]?key|access[_-]?token|password|secret|authorization)\s*[:=]\s*[^\s,;]+"
+    r"(?i)(api[_-]?key|access[_-]?token|password|secret|authorization)\s*[:=]\s*(?:bearer\s+)?[^\s,;]+"
 )
 
 
