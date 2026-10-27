@@ -1,247 +1,236 @@
 # CloudOps AI
-### Evidence-driven incident intelligence for modern software systems
+### Evidence-first incident intelligence for modern software systems
 
-> **Your monitoring tells you something broke. CloudOps AI investigates why.**
+> **Your monitoring tells you something broke. CloudOps AI helps you investigate why.**
 
-CloudOps AI is an open, vendor-neutral incident intelligence platform designed to connect operational signals with the engineering context needed to investigate production failures. The long-term goal is to move beyond noisy alerts and generic log summaries toward **evidence-backed hypotheses, explainable root-cause analysis, and measurable incident investigations**.
+CloudOps AI is an early-stage incident intelligence platform focused on turning noisy application events into traceable incidents and evidence-linked investigation hypotheses. The project is being built around a practical engineering principle: an incident explanation should point back to the observations that support it.
 
-**Project status: In development.** This repository is the foundation for the project. Capabilities described as planned below are product goals, not claims that they are already implemented.
+**Status: early MVP.** Event ingestion, deterministic incident correlation, SQLite persistence, an incident dashboard, and baseline evidence-linked triage are implemented. The LLM-powered investigation pipeline, OpenTelemetry ingestion, evidence graph, GitHub issue creation, and production AWS deployment remain planned work.
 
----
+## What works today
 
-## The problem
+- **Event ingestion API** with Pydantic validation, timezone-aware timestamps, severity, service, environment, trace/deployment identifiers, and attributes.
+- **Deterministic event fingerprinting** that normalizes common high-cardinality values before hashing.
+- **Incident grouping** for matching events from the same service and environment inside a configurable time window.
+- **Incident lifecycle** with open, investigating, and resolved states.
+- **Evidence retention** that links ingested events to their incident and keeps timestamps and trace/deployment context.
+- **Baseline investigation endpoint** that identifies a small set of common failure patterns, links hypotheses to stored event IDs, and suggests next checks. It does not call an LLM yet.
+- **Next.js dashboard** showing incident counts and queue details, with a form to send sample events.
+- **Docker Compose setup** for local API and web development.
+- **Backend tests and GitHub Actions CI** for core API flows.
 
-Production incidents rarely announce their cause clearly. A latency spike may be a symptom of a slow dependency; an error burst may begin shortly after a deployment; several alerts may all describe one underlying failure.
+## Product direction
 
-Teams often have to correlate logs, traces, deployments, commits, service dependencies, runbooks, and past incidents manually. CloudOps AI is being designed to bring those sources together into a traceable investigation workflow.
+Production incidents rarely reveal their cause in one log line. A latency spike may be a downstream timeout; an error burst may follow a deployment; many alerts may describe one underlying failure.
 
-## Product thesis
+CloudOps AI is being designed as a vendor-neutral investigation layer that brings operational signals and engineering context together. Its longer-term goal is to correlate events, compare plausible failure hypotheses, gather supporting and contradictory evidence, and produce reviewable next steps.
 
-Build an **open, vendor-neutral investigation layer** that assembles operational evidence, generates competing failure hypotheses, tests them against available signals, and presents findings with supporting evidence and counter-evidence.
+The differentiator is **not just asking an LLM to summarize logs**. It is making investigations inspectable and testable.
 
-The differentiator is not “send logs to an LLM.” It is the investigation discipline around the model:
+## Current architecture
 
-- **Correlate before summarizing:** group related signals into a coherent incident instead of treating every alert as a separate event.
-- **Investigate with evidence:** link conclusions to time-bounded logs, traces, deployment events, commits, service relationships, and runbooks.
-- **Compare hypotheses:** make uncertainty visible, consider alternative explanations, and avoid presenting an unverified guess as a confirmed root cause.
-- **Evaluate rather than merely demo:** test against reproducible scenarios and ground-truth causes, tracking both accuracy and operational cost.
-- **Keep humans in control:** recommend mitigations and create engineering artifacts with reviewable evidence; high-impact remediation should require explicit approval.
+~~~mermaid
+flowchart LR
+    A[Sample event / API client] --> B[FastAPI validation]
+    B --> C[Normalize and fingerprint]
+    C --> D[SQLite persistence]
+    D --> E[Incident correlation]
+    E --> F[Incident queue API]
+    D --> G[Evidence-linked baseline triage]
+    F --> H[Next.js dashboard]
+    G --> I[Hypotheses + evidence IDs + next checks]
+~~~
 
-## Intended investigation workflow
+The current vertical slice is intentionally small and runnable. The broader target architecture adds telemetry adapters, deployment/commit context, an evidence graph, LLM-assisted hypothesis evaluation, replay-based benchmarking, and reviewed engineering integrations.
 
-```mermaid
-flowchart TD
-    A[Telemetry: logs, metrics, traces] --> D[Normalize and time-align]
-    B[Deployments, commits, CI events] --> D
-    C[Services, dependencies, runbooks] --> E[Build service and evidence context]
-    D --> F[Detect signals and correlate alerts]
-    E --> F
-    F --> G[Create or update incident]
-    G --> H[Generate competing hypotheses]
-    H --> I[Retrieve targeted evidence]
-    I --> J[Evaluate supporting and counter evidence]
-    J --> K[Rank likely causes with uncertainty]
-    K --> L[Recommend next checks and mitigations]
-    L --> M[Human review and incident workflow]
-    M --> N[GitHub issue / postmortem draft]
-    N --> O[Evaluation, replay, and feedback]
-```
+## Technology stack
 
-*This is the target architecture. Components will be implemented and validated incrementally.*
+| Layer | Current implementation | Planned extension |
+|---|---|---|
+| API | Python, FastAPI, Pydantic | Authenticated ingestion and integration adapters |
+| Persistence | SQLite for local MVP | PostgreSQL for multi-user deployment |
+| Correlation | Deterministic message fingerprint + service/environment + time window | Trace, deployment, topology, and semantic correlation |
+| Investigation | Deterministic message-pattern baseline with linked evidence IDs | Provider-agnostic LLM investigation with schema validation and counter-evidence |
+| Web | Next.js, React, TypeScript | Incident details, timeline, evidence and evaluation views |
+| Local runtime | Docker Compose | Hardened cloud deployment |
+| CI | GitHub Actions, pytest | Frontend build, security checks and broader integration tests |
 
-## Core product areas
+## Quick start
 
-### 1. Telemetry ingestion and normalization
-Planned integration path for structured logs and OpenTelemetry signals, with normalized timestamps, service identity, severity, environment, trace/correlation identifiers, and source metadata. Ingestion should validate payloads, handle retries safely, and make duplicate delivery explicit.
+### Requirements
 
-### 2. Incident correlation
-Reduce alert noise by grouping related events using time windows, service context, trace relationships, error fingerprints, and deployment proximity. Correlation should remain inspectable: users need to understand why two signals were grouped together.
+- Python 3.11+
+- Node.js 22+ and npm
+- Docker Desktop (optional, for Compose)
 
-### 3. Evidence graph
-Connect services and dependencies to telemetry, deployments, code changes, runbooks, and historical incidents. Every investigation should preserve source references and timestamps so a reviewer can move from a conclusion back to the evidence.
+### 1. Start the API
 
-### 4. Hypothesis-driven root-cause analysis
-Generate multiple plausible explanations, gather focused supporting evidence, search for contradictions, and rank hypotheses. A result should distinguish:
-- observed facts from model-generated interpretation;
-- supporting evidence from counter-evidence;
-- likely cause from confirmed cause;
-- confidence from certainty;
-- recommended diagnostics from actions already executed.
+From the repository root:
 
-### 5. Incident workspace
-Target incident lifecycle:
+~~~bash
+python -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
 
-`detected → triaged → investigating → mitigating → resolved → reviewed`
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+uvicorn backend.app.main:app --reload --port 8000
+~~~
 
-The planned workspace includes an incident timeline, related signals, evidence, hypotheses, investigation notes, ownership, status transitions, and an auditable history.
+The API creates a local SQLite database at data/cloudops.db on startup by default. Override CLOUDOPS_DB_PATH to change its location.
 
-### 6. Engineering workflow integration
-Planned GitHub integration can turn a reviewed incident into a structured issue containing a concise summary, impact, timeline, probable cause, evidence links, relevant deployments/commits, and next steps. Integrations should be idempotent and must not silently create duplicate issues.
+- Health: http://localhost:8000/health
+- Interactive API docs: http://localhost:8000/docs
 
-### 7. Replay and evaluation lab
-Reproducible scenarios will make quality measurable instead of relying on impressive-looking screenshots. The evaluation harness is intended to measure root-cause ranking, evidence quality, alert grouping, latency, and per-investigation cost against labelled incidents.
+### 2. Start the web dashboard
 
-### 8. Safe-by-default operations
-Initial versions should focus on read-only investigation and recommendations. Any future write operation or remediation must use explicit authorization, least privilege, audit events, idempotency where applicable, and human approval for high-impact actions.
+In a second terminal:
 
----
+~~~bash
+cd frontend
+npm install
+npm run dev
+~~~
+
+Open http://localhost:3000. The browser app expects the API at http://localhost:8000 by default. To use a different API origin, set NEXT_PUBLIC_API_BASE_URL before building/running the frontend.
+
+### 3. Or run with Docker Compose
+
+From the repository root:
+
+~~~bash
+docker compose up --build
+~~~
+
+Then open the dashboard at http://localhost:3000 and API docs at http://localhost:8000/docs. Compose persists SQLite data in the cloudops-data volume.
+
+## Try the API
+
+Send an event:
+
+~~~bash
+curl -X POST http://localhost:8000/api/v1/events \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service": "checkout-api",
+    "environment": "demo",
+    "severity": "error",
+    "message": "upstream request timeout after 30 seconds",
+    "trace_id": "trace-demo-001"
+  }'
+~~~
+
+Send a second event with a similar message from the same service/environment. Within the correlation window, the API should group it with the existing open incident.
+
+List incidents:
+
+~~~bash
+curl http://localhost:8000/api/v1/incidents
+~~~
+
+Fetch an incident and its event evidence:
+
+~~~bash
+curl http://localhost:8000/api/v1/incidents/1
+~~~
+
+Run baseline triage:
+
+~~~bash
+curl -X POST http://localhost:8000/api/v1/incidents/1/investigate
+~~~
+
+Update incident status:
+
+~~~bash
+curl -X PATCH http://localhost:8000/api/v1/incidents/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"investigating"}'
+~~~
+
+Use the incident ID returned by your own API response instead of assuming it is 1.
+
+## API endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | /health | Health check |
+| POST | /api/v1/events | Validate and ingest an event; create or update a correlated incident |
+| GET | /api/v1/incidents | List recent incidents |
+| GET | /api/v1/incidents/{id} | Retrieve incident and stored event evidence |
+| PATCH | /api/v1/incidents/{id}/status | Change incident status |
+| POST | /api/v1/incidents/{id}/investigate | Generate evidence-linked baseline triage hypotheses |
+
+## Configuration
+
+Copy .env.example to .env if you want to keep local settings in one place. Environment variables are read by the API process; a dotenv loader is not currently included, so export variables in your shell or configure them in your process manager/Compose environment.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| CLOUDOPS_DB_PATH | ./data/cloudops.db | SQLite database path |
+| CLOUDOPS_CORS_ORIGINS | http://localhost:3000 | Comma-separated allowed browser origins |
+| CLOUDOPS_CORRELATION_WINDOW_SECONDS | 300 | Maximum time gap for grouping matching events |
+| NEXT_PUBLIC_API_BASE_URL | http://localhost:8000 | API base URL used by the web client |
+
+The example includes future LLM provider placeholders only. No LLM provider is called by the current implementation, and no API key is required for the MVP.
+
+## Tests
+
+From the repository root:
+
+~~~bash
+pip install -r requirements.txt
+pytest
+~~~
+
+The current tests cover health, event validation, event correlation, service isolation, evidence-linked baseline investigation, and incident status updates. CI runs the backend test suite on pushes and pull requests to main.
+
+## Roadmap
+
+### Phase 1 — Reliable vertical slice
+- [x] Validated event ingestion API
+- [x] Deterministic fingerprints and time-window incident grouping
+- [x] Persist events and incidents locally
+- [x] Incident queue UI and sample-event form
+- [x] Evidence-linked deterministic triage endpoint
+- [x] Backend tests and CI workflow
+- [ ] Incident detail view with timeline and investigation output in the UI
+- [ ] Improve event deduplication semantics and add explicit correlation explanations
+
+### Phase 2 — Context-aware investigation
+- [ ] OpenTelemetry-compatible logs/traces/metrics ingestion
+- [ ] Deployment and GitHub commit metadata
+- [ ] Service/dependency context and evidence graph
+- [ ] Provider-agnostic LLM adapter with schema-validated outputs
+- [ ] Multiple hypotheses, counter-evidence, and calibrated evaluation
+
+### Phase 3 — Integrations and evaluation
+- [ ] GitHub issue creation with idempotency and reviewable evidence
+- [ ] Seeded incident scenarios and replay without future-data leakage
+- [ ] Root-cause Top-1/Top-3, evidence quality, grouping, latency, and cost metrics
+- [ ] Multi-tenant authentication, authorization, audit trails, rate limits, and secret redaction
+- [ ] AWS deployment and operational runbooks
 
 ## Engineering principles
 
-1. **Evidence before assertion.** A root-cause statement should reference the observations that support it.
-2. **Temporal correctness.** Replay evaluations must only expose information that would have been available at the simulated investigation time; future-data leakage invalidates the result.
-3. **Honest uncertainty.** Missing telemetry, ambiguous evidence, and conflicting hypotheses should be surfaced, not hidden behind a confident-sounding answer.
-4. **Deterministic core, probabilistic assistance.** Parsing, access control, incident state transitions, deduplication rules, and evaluation metrics should be testable without depending on an LLM response.
-5. **Provider neutrality.** Keep model access behind an interface so the investigation workflow is not coupled to one LLM provider.
-6. **Privacy and tenant isolation.** Treat logs and traces as potentially sensitive; minimize stored data, redact secrets, scope every query to the correct tenant, and avoid logging credentials or raw sensitive payloads.
-7. **Operational resilience.** Use bounded retries, timeouts, backpressure, idempotent event handling, and observable failure paths.
+1. **Evidence before assertion:** tie hypotheses to stored event IDs and source timestamps.
+2. **Honest uncertainty:** baseline heuristics are triage aids, not proof of root cause.
+3. **Deterministic core:** event validation, fingerprinting, persistence, and state changes should be testable without an LLM.
+4. **Temporal correctness:** replay must never expose information that would not have been available at investigation time.
+5. **Safe integrations:** use least privilege, idempotency, audit trails, and human approval before high-impact changes.
+6. **Privacy by design:** logs can contain secrets and personal data; redact and minimize data before production use.
 
-## Target architecture and technology direction
+## Security and limitations
 
-The planned stack is intentionally pragmatic and may evolve as implementation and measurements demand it.
+This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. Do not connect it to sensitive production telemetry or expose it to the public internet without adding authentication, authorization, retention controls, secret redaction, rate limits, audit coverage, and a security review.
 
-| Layer | Intended direction | Responsibility |
-|---|---|---|
-| Web application | Next.js + TypeScript | Incident workspace, timelines, evidence and evaluation views |
-| API and domain logic | Python + FastAPI | Ingestion endpoints, incident lifecycle, investigation orchestration |
-| Transactional store | PostgreSQL | Tenants, services, incidents, relationships, audit events and configuration |
-| Background work | Redis-backed queue or equivalent | Async ingestion, correlation, investigation jobs and retries |
-| Observability input | OpenTelemetry-compatible adapters | Standardized traces, metrics and logs |
-| AI interface | Provider-agnostic model adapter | Hypothesis generation, evidence synthesis and structured outputs |
-| Integrations | GitHub first; webhooks later | Engineering workflow and event delivery |
-| Delivery | Docker; CI with GitHub Actions | Reproducible development, automated checks and deployment pipeline |
-| Cloud hosting | AWS as an initial deployment target | Runtime, managed storage, secrets and telemetry |
-
-These are architectural targets, not a statement that every component is currently present or deployed.
-
-## Evaluation: how quality should be demonstrated
-
-CloudOps AI should publish results only after running a versioned, reproducible evaluation. The planned benchmark will contain seeded incidents such as a faulty deployment, dependency timeout, resource saturation, configuration drift, and a downstream service failure.
-
-| Metric | What it should answer |
-|---|---|
-| Root-cause Top-1 accuracy | Was the highest-ranked cause correct? |
-| Root-cause Top-3 recall | Did the correct cause appear among the leading hypotheses? |
-| Evidence precision | Were cited observations genuinely relevant to the claim? |
-| Evidence coverage | Did the investigation include the important available evidence? |
-| Alert grouping quality | Were related alerts merged without over-collapsing unrelated failures? |
-| Time to useful diagnosis | How long from incident start until a useful, evidence-backed result? |
-| False-positive rate | How often did the system declare an incident without sufficient signal? |
-| Latency and cost per investigation | Is the workflow practical to operate? |
-
-**No benchmark scores are claimed yet.** Any published result should include the dataset/scenario version, baseline, number of trials, evaluation procedure, and known limitations. Comparisons must use the same inputs and avoid leaking ground truth into the investigation.
-
-## Development roadmap
-
-### Phase 0 — Specification and foundation
-- [ ] Define domain models, event contracts, and incident lifecycle.
-- [ ] Create the application skeleton, configuration management, and local development environment.
-- [ ] Add linting, type checks, unit tests, and CI.
-- [ ] Document threat model, data boundaries, and non-goals.
-
-### Phase 1 — First vertical slice
-- [ ] Accept a normalized event through an authenticated API.
-- [ ] Persist events and create an incident from a seeded failure.
-- [ ] Show incident details and an ordered timeline in the UI.
-- [ ] Add fixture-driven tests for event validation and incident transitions.
-
-### Phase 2 — Correlation and evidence
-- [ ] Deduplicate repeated events with explicit, testable rules.
-- [ ] Ingest deployment and GitHub metadata.
-- [ ] Link evidence to services, timestamps, and incident hypotheses.
-- [ ] Add explainable correlation reasons and counter-evidence.
-
-### Phase 3 — AI-assisted investigation
-- [ ] Add a provider adapter and schema-validated outputs.
-- [ ] Implement competing hypotheses and targeted evidence retrieval.
-- [ ] Separate facts, inferences, uncertainty, and proposed next checks.
-- [ ] Test malformed model output, timeouts, retries, and provider unavailability.
-
-### Phase 4 — Replay, integrations, and hardening
-- [ ] Build seeded incidents with known causes.
-- [ ] Add temporal replay and ground-truth evaluation.
-- [ ] Generate reviewed GitHub issues idempotently.
-- [ ] Add tenant isolation tests, rate limits, audit coverage, and security checks.
-- [ ] Publish reproducible evaluation results and a demo walkthrough.
-
-Roadmap checkboxes should be updated only after each item is implemented and tested.
-
-## Local development
-
-The repository is currently at the **project-foundation stage**. A runnable local environment, service commands, and setup instructions will be added with the initial application skeleton. Until then, the architecture and roadmap above describe the intended direction rather than a working installation.
-
-The planned developer experience is:
-
-1. Clone the repository.
-2. Configure local environment variables using a documented `.env.example` with placeholders only.
-3. Start dependencies using Docker Compose.
-4. Run database migrations and seed reproducible sample services/events.
-5. Run tests and start the API and web application.
-6. Trigger a seeded failure and inspect the resulting evidence-backed incident.
-
-Never commit API keys, provider credentials, production logs, customer telemetry, or real secrets.
-
-## Security and privacy
-
-The project is being designed for operational data, which can contain secrets, personal information, internal hostnames, and customer identifiers. Before production use, the implementation must include:
-
-- authentication and authorization with tenant-scoped access checks;
-- secret redaction and configurable retention;
-- TLS for network traffic and secure secret storage;
-- input validation, request-size limits, rate limits, and safe error handling;
-- audit trails for state changes and external side effects;
-- least-privilege integration credentials;
-- explicit approval for high-impact actions;
-- documented handling for model-provider data retention and telemetry sent to external services.
-
-This repository should not be connected to production systems until these controls have been implemented and reviewed.
-
-## Repository structure (target)
-
-```text
-cloudops-ai/
-├── apps/
-│   ├── api/                 # FastAPI application
-│   └── web/                 # Next.js incident workspace
-├── packages/
-│   └── contracts/           # Shared event and API contracts
-├── services/
-│   ├── ingestion/           # Validation and normalization
-│   ├── correlation/         # Event grouping and incident detection
-│   ├── investigation/       # Evidence retrieval and hypothesis evaluation
-│   └── integrations/        # GitHub and webhook adapters
-├── evals/
-│   ├── scenarios/           # Seeded incidents and ground truth
-│   └── reports/             # Versioned, reproducible evaluation outputs
-├── infra/                   # Local and deployment configuration
-├── docs/
-│   ├── architecture.md
-│   ├── threat-model.md
-│   └── decisions/            # Architecture decision records
-├── tests/
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
-
-This is a proposed structure and will be adjusted to match the code as the project is built.
+The current investigation engine uses simple message-pattern heuristics. Its confidence values are heuristic ranking scores, not statistically calibrated probabilities. It does not currently inspect metrics, traces, deployments, source code, or external dependency state.
 
 ## Contributing
 
-Early contributions and design feedback are welcome. Before opening a pull request:
-
-- explain the problem and intended behavior;
-- include tests for logic and failure paths;
-- document any changes to event contracts or APIs;
-- avoid adding secrets, private telemetry, or customer data;
-- include reproducible evidence for performance or accuracy claims.
-
-## Current status
-
-CloudOps AI is an early-stage project whose immediate goal is to establish a reliable, testable vertical slice: **ingest an event → correlate a failure → create an incident → show its evidence → evaluate the result**. AI investigation, integrations, and broader cloud deployment will follow this foundation.
-
-Progress should be judged by working code, automated tests, reproducible evaluations, and a usable demonstration—not the number of technologies listed.
+Issues and pull requests are welcome. Include a clear problem statement, tests for changed behavior, and reproducible evidence for performance or accuracy claims. Never submit credentials, production logs, customer data, or other sensitive information.
 
 ## License
 
-A license has not yet been selected. Until one is added to the repository, no open-source license should be assumed.
+No license has been selected yet. Until a license file is added, reuse and redistribution permissions should not be assumed.
