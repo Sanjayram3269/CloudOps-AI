@@ -5,7 +5,7 @@
 
 CloudOps AI is an early-stage incident intelligence platform focused on turning noisy application events into traceable incidents and evidence-linked investigation hypotheses. The project is being built around a practical engineering principle: an incident explanation should point back to the observations that support it.
 
-**Status: early MVP.** Event ingestion, deterministic incident correlation, SQLite persistence, an incident dashboard, and baseline evidence-linked triage are implemented. The LLM-powered investigation pipeline, OpenTelemetry ingestion, evidence graph, GitHub issue creation, and production AWS deployment remain planned work.
+**Status: early MVP.** Event ingestion, deterministic incident correlation, SQLite persistence, the Next.js dashboard, evidence-linked baseline triage, optional OpenAI-backed hypothesis generation, and configurable GitHub issue creation are implemented. OpenTelemetry ingestion, a richer evidence graph, replay-based evaluation, multi-tenant production controls, and AWS deployment remain planned work.
 
 ## What works today
 
@@ -186,7 +186,7 @@ pip install -r requirements.txt
 pytest
 ~~~
 
-The current tests cover health, event validation, event correlation, service isolation, evidence-linked baseline investigation, and incident status updates. CI runs the backend test suite on pushes and pull requests to main.
+The current tests cover health, event validation, event correlation, service isolation, evidence-linked baseline investigation, incident status updates, GitHub configuration handling, and sensitive-value redaction. CI runs the backend test suite on pushes and pull requests to main.
 
 ## Roadmap
 
