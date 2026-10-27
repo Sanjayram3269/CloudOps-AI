@@ -1,0 +1,20 @@
+{
+  "scenario_id": "checkout-upstream-timeout-replay-v1",
+  "description": "A seeded incident with a later event deliberately withheld from the simulated investigation cutoff.",
+  "incident": {
+    "id": 9001,
+    "title": "checkout-api: upstream request timeout",
+    "service": "checkout-api",
+    "environment": "replay",
+    "severity": "error",
+    "status": "investigating"
+  },
+  "as_of": "2026-10-28T12:03:00+00:00",
+  "events": [
+    {"event_id": 1, "occurred_at": "2026-10-28T12:00:00+00:00", "service": "checkout-api", "severity": "error", "message": "upstream request timeout after 30 seconds", "trace_id": "trace-001", "deployment_id": "deploy-17"},
+    {"event_id": 2, "occurred_at": "2026-10-28T12:01:00+00:00", "service": "checkout-api", "severity": "warning", "message": "upstream request timeout after 45 seconds", "trace_id": "trace-002", "deployment_id": "deploy-17"},
+    {"event_id": 3, "occurred_at": "2026-10-28T12:02:30+00:00", "service": "checkout-api", "severity": "error", "message": "upstream request timeout after 60 seconds", "trace_id": "trace-003", "deployment_id": "deploy-17"},
+    {"event_id": 4, "occurred_at": "2026-10-28T12:05:00+00:00", "service": "checkout-api", "severity": "critical", "message": "out of memory after retry storm; memory limit exceeded", "trace_id": "trace-004", "deployment_id": "deploy-18"}
+  ],
+  "expected_cause": "Dependency or downstream timeout"
+}
