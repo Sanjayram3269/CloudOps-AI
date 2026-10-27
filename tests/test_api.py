@@ -188,3 +188,15 @@ def test_seeded_evaluation_dataset_covers_known_rules():
     assert report["top1_accuracy"] == 1.0
     assert report["top3_accuracy"] == 1.0
     assert "not production" in report["evaluation_type"]
+
+
+
+def test_temporal_replay_withholds_future_events():
+    from pathlib import Path
+    from scripts.replay_incident import replay
+    report = replay(Path("samples/replay-scenario.json"))
+    assert report["visible_event_ids"] == [1, 2, 3]
+    assert report["withheld_future_event_ids"] == [4]
+    assert report["future_leakage_detected"] is False
+    assert report["top1_correct"] is True
+    assert 4 not in report["investigation_evidence_ids"]
