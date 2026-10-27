@@ -12,6 +12,7 @@ from backend.app import database
 from backend.app.config import correlation_window_seconds, cors_origins
 from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
+from backend.app.github_issues import GitHubIssueConfigurationError, GitHubIssueError, create_or_get_github_issue
 from backend.app.schemas import EventIn, IncidentStatus
 
 app = FastAPI(
@@ -96,3 +97,19 @@ def investigate_incident(incident_id: int) -> dict[str, Any]:
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
     return investigate(incident, database.get_events(incident_id))
+
+
+
+@app.post("/api/v1/incidents/{incident_id}/github-issue")
+def create_github_issue(incident_id: int) -> dict[str, Any]:
+    incident = database.get_incident(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    investigation = investigate(incident, database.get_events(incident_id))
+    try:
+        result = create_or_get_github_issue(incident, investigation)
+    except GitHubIssueConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except GitHubIssueError as exc:
+        raise HTTPException(status_code=502, detail="GitHub issue creation failed") from exc
+    return {"incident_id": incident_id, **result}

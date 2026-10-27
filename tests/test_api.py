@@ -89,3 +89,17 @@ def test_invalid_event_is_rejected():
     with TestClient(app) as client:
         response = client.post("/api/v1/events", json={"service": "", "message": ""})
         assert response.status_code == 422
+
+
+
+def test_github_issue_endpoint_requires_explicit_configuration(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        response = client.post(
+            f"/api/v1/incidents/{created.json()['incident_id']}/github-issue"
+        )
+        assert response.status_code == 503

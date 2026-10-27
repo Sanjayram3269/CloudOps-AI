@@ -14,9 +14,10 @@ CloudOps AI is an early-stage incident intelligence platform focused on turning 
 - **Incident grouping** for matching events from the same service and environment inside a configurable time window.
 - **Incident lifecycle** with open, investigating, and resolved states.
 - **Evidence retention** that links ingested events to their incident and keeps timestamps and trace/deployment context.
-- **Baseline investigation endpoint** that identifies a small set of common failure patterns, links hypotheses to stored event IDs, and suggests next checks. It does not call an LLM yet.
+- **Evidence-linked investigation** with deterministic fallback heuristics and optional OpenAI-powered hypotheses. Model-supplied evidence IDs are validated against stored events; LLM conclusions remain unverified.
 - **Next.js dashboard** showing incident counts and queue details, with a form to send sample events.
 - **Docker Compose setup** for local API and web development.
+- **Optional GitHub issue creation** using an explicitly configured token and repository, with incident markers to reuse an existing issue on repeat requests.
 - **Backend tests and GitHub Actions CI** for core API flows.
 
 ## Product direction
@@ -160,7 +161,8 @@ Use the incident ID returned by your own API response instead of assuming it is 
 | GET | /api/v1/incidents | List recent incidents |
 | GET | /api/v1/incidents/{id} | Retrieve incident and stored event evidence |
 | PATCH | /api/v1/incidents/{id}/status | Change incident status |
-| POST | /api/v1/incidents/{id}/investigate | Generate evidence-linked baseline triage hypotheses |
+| POST | /api/v1/incidents/{id}/investigate | Generate evidence-linked hypotheses; use OpenAI when configured, otherwise deterministic triage |
+| POST | /api/v1/incidents/{id}/github-issue | Create or reuse a structured GitHub issue (requires explicit credentials) |
 
 ## Configuration
 
@@ -173,7 +175,7 @@ Copy .env.example to .env if you want to keep local settings in one place. Envir
 | CLOUDOPS_CORRELATION_WINDOW_SECONDS | 300 | Maximum time gap for grouping matching events |
 | NEXT_PUBLIC_API_BASE_URL | http://localhost:8000 | API base URL used by the web client |
 
-The example includes future LLM provider placeholders only. No LLM provider is called by the current implementation, and no API key is required for the MVP.
+OPENAI_API_KEY enables optional LLM-assisted investigation; OPENAI_MODEL defaults to gpt-4.1-mini. Without a key, the API uses deterministic heuristics. GITHUB_TOKEN and GITHUB_REPOSITORY (owner/repo) enable optional issue creation. Never commit real credentials. The API currently has no authentication, so keep it local; do not expose configured write credentials on a public instance.
 
 ## Tests
 
@@ -225,7 +227,7 @@ The current tests cover health, event validation, event correlation, service iso
 
 This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. Do not connect it to sensitive production telemetry or expose it to the public internet without adding authentication, authorization, retention controls, secret redaction, rate limits, audit coverage, and a security review.
 
-The current investigation engine uses simple message-pattern heuristics. Its confidence values are heuristic ranking scores, not statistically calibrated probabilities. It does not currently inspect metrics, traces, deployments, source code, or external dependency state.
+The deterministic fallback uses message-pattern heuristics. When enabled, the LLM receives only stored event messages and incident metadata; it does not inspect metrics, traces, deployments, source code, or external dependency state. Confidence values are heuristic/model-provided scores, not statistically calibrated probabilities. GitHub issue creation is an external side effect and must only be enabled in a trusted, authenticated environment.
 
 ## Contributing
 

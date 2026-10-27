@@ -32,7 +32,9 @@ def init_db() -> None:
                 fingerprint TEXT NOT NULL,
                 first_seen TEXT NOT NULL,
                 last_seen TEXT NOT NULL,
-                event_count INTEGER NOT NULL DEFAULT 1
+                event_count INTEGER NOT NULL DEFAULT 1,
+                github_issue_url TEXT,
+                github_issue_number INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_incidents_last_seen
                 ON incidents(last_seen DESC);
@@ -156,5 +158,18 @@ def update_incident_status(incident_id: int, status: str) -> dict[str, Any] | No
         )
         if cursor.rowcount == 0:
             return None
+        row = db.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone()
+        return row_dict(row)
+
+
+
+def save_github_issue(incident_id: int, url: str, number: int) -> dict[str, Any] | None:
+    """Persist a GitHub issue reference once; repeated requests reuse the stored issue."""
+    with connect() as db:
+        db.execute(
+            """UPDATE incidents SET github_issue_url = ?, github_issue_number = ?
+               WHERE id = ? AND github_issue_url IS NULL""",
+            (url, number, incident_id),
+        )
         row = db.execute("SELECT * FROM incidents WHERE id = ?", (incident_id,)).fetchone()
         return row_dict(row)
