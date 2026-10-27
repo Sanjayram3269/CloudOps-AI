@@ -22,6 +22,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest
       - run: python scripts/evaluate_baseline.py --output /tmp/cloudops-baseline-evaluation.json --min-top1 1.0
+      - run: python scripts/replay_incident.py --output /tmp/cloudops-replay-evaluation.json
 
   frontend:
     runs-on: ubuntu-latest
