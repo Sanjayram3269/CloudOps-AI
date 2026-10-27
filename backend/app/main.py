@@ -14,7 +14,7 @@ from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
 from backend.app.otel_ingestion import parse_otlp_logs
 from backend.app.github_issues import GitHubIssueConfigurationError, GitHubIssueError, create_or_get_github_issue
-from backend.app.schemas import EventIn, IncidentStatus
+from backend.app.schemas import DeploymentIn, EventIn, IncidentStatus
 
 app = FastAPI(
     title="CloudOps AI API",
@@ -97,6 +97,7 @@ def get_incident(incident_id: int) -> dict[str, Any]:
     return {
         **serialize_incident(incident),
         "evidence": database.get_events(incident_id),
+        "related_deployments": database.get_related_deployments(incident_id),
     }
 
 
@@ -117,7 +118,9 @@ def investigate_incident(incident_id: int) -> dict[str, Any]:
     incident = database.get_incident(incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
-    return investigate(incident, database.get_events(incident_id))
+    result = investigate(incident, database.get_events(incident_id))
+    result["deployment_context"] = database.get_related_deployments(incident_id)
+    return result
 
 
 
@@ -134,3 +137,13 @@ def create_github_issue(incident_id: int) -> dict[str, Any]:
     except GitHubIssueError as exc:
         raise HTTPException(status_code=502, detail="GitHub issue creation failed") from exc
     return {"incident_id": incident_id, **result}
+
+
+
+@app.post("/api/v1/deployments", status_code=201)
+def ingest_deployment(payload: DeploymentIn) -> dict[str, Any]:
+    """Record deployment metadata for incident correlation and investigation context."""
+    deployment = payload.model_dump()
+    deployment["deployed_at"] = deployment["deployed_at"].astimezone(timezone.utc).isoformat()
+    deployment["outcome"] = deployment["outcome"].value
+    return database.record_deployment(deployment)
