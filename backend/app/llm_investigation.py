@@ -10,16 +10,15 @@ from openai import OpenAI
 
 
 _SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|authorization|client[_-]?secret)\\b(\\s*[:=]\\s*)(?:bearer\\s+)?([^\\s,;]+)"
+    r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|authorization|client[_-]?secret)\b(\s*[:=]\s*)(?:bearer\s+)?([^\s,;]+)"
 )
-_BEARER_TOKEN = re.compile(r"(?i)\\bBearer\\s+[A-Za-z0-9._~+/=-]{8,}")
+_BEARER_TOKEN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}")
 
 
 def redact_for_model(message: str) -> str:
     """Redact common credential assignments before log text leaves this process."""
-    value = _SECRET_ASSIGNMENT.sub(r"\\1\\2[REDACTED]", message[:2500])
+    value = _SECRET_ASSIGNMENT.sub(r"\1\2[REDACTED]", message[:2500])
     return _BEARER_TOKEN.sub("Bearer [REDACTED]", value)
-
 
 def investigate_with_llm(incident: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any] | None:
     api_key = os.getenv("OPENAI_API_KEY")
