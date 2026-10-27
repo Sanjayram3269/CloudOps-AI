@@ -200,3 +200,14 @@ def test_temporal_replay_withholds_future_events():
     assert report["future_leakage_detected"] is False
     assert report["top1_correct"] is True
     assert 4 not in report["investigation_evidence_ids"]
+
+
+
+def test_llm_redaction_removes_common_secret_values():
+    from backend.app.llm_investigation import redact_for_model
+    source = "request failed api_key=sk-test-secret password=hunter2 Authorization: Bearer abcdefghijklmnop"
+    redacted = redact_for_model(source)
+    assert "sk-test-secret" not in redacted
+    assert "hunter2" not in redacted
+    assert "abcdefghijklmnop" not in redacted
+    assert redacted.count("[REDACTED]") >= 3
