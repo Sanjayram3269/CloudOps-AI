@@ -83,6 +83,8 @@ def parse_otlp_logs(payload: dict[str, Any]) -> list[EventIn]:
         if not isinstance(resource_group, dict):
             raise ValueError("Each resourceLogs entry must be an object")
         resource = resource_group.get("resource") or {}
+        if not isinstance(resource, dict):
+            raise ValueError("resource must be an object")
         resource_attrs = _attributes(resource.get("attributes", []))
         service = str(resource_attrs.get("service.name") or "unknown-service")[:120]
         environment = str(resource_attrs.get("deployment.environment.name")
