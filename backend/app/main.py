@@ -12,6 +12,7 @@ from backend.app import database
 from backend.app.config import correlation_window_seconds, cors_origins
 from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
+from backend.app.otel_ingestion import parse_otlp_logs
 from backend.app.github_issues import GitHubIssueConfigurationError, GitHubIssueError, create_or_get_github_issue
 from backend.app.schemas import EventIn, IncidentStatus
 
@@ -49,8 +50,7 @@ def list_incidents(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, An
     return {"items": incidents, "count": len(incidents)}
 
 
-@app.post("/api/v1/events", status_code=201)
-def ingest_event(payload: EventIn) -> dict[str, Any]:
+def _persist_event(payload: EventIn) -> dict[str, Any]:
     event = payload.model_dump()
     event["occurred_at"] = event["occurred_at"].astimezone(timezone.utc).isoformat()
     event["severity"] = event["severity"].value
@@ -65,6 +65,27 @@ def ingest_event(payload: EventIn) -> dict[str, Any]:
         "incident_id": incident_id,
         "grouped_into_existing_incident": grouped,
         "incident": serialize_incident(incident),
+    }
+
+
+@app.post("/api/v1/events", status_code=201)
+def ingest_event(payload: EventIn) -> dict[str, Any]:
+    return _persist_event(payload)
+
+
+@app.post("/v1/logs", status_code=202)
+@app.post("/api/v1/telemetry/otlp/v1/logs", status_code=202)
+def ingest_otlp_logs(payload: dict[str, Any]) -> dict[str, Any]:
+    """Accept OTLP JSON log exports and feed records through normal correlation."""
+    try:
+        events = parse_otlp_logs(payload)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    results = [_persist_event(event) for event in events]
+    return {
+        "accepted": len(results),
+        "grouped": sum(1 for item in results if item["grouped_into_existing_incident"]),
+        "items": results,
     }
 
 
