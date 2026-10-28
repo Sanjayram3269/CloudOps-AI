@@ -11,10 +11,11 @@ The MVP intentionally prioritizes a reproducible path from an event to a visible
 5. **Deployment context** — deployment events can be ingested with service, environment, deployment ID, version, commit SHA, actor, outcome, and timestamp. Incident detail and investigation responses include deployments near the incident start for the same service/environment; temporal proximity is context, not proof of cause.
 6. **Baseline triage** — a deterministic ruleset matches common message patterns and returns hypotheses with the event IDs that matched. This does not prove causality.
 7. **Alertmanager integration** — a bearer-token-protected webhook normalizes firing Prometheus Alertmanager notifications into validated events; resolved notifications are acknowledged but do not silently close incidents. The endpoint is disabled unless a shared token is configured.
-8. **OTLP ingestion** — `/v1/logs` maps OTLP/HTTP JSON resource attributes, severity, timestamps, trace IDs, and deployment metadata into the same validated event/correlation path. A request is capped at 500 records.
-9. **Dashboard** — the Next.js app reads the incident list, submits sample events, and loads an incident evidence timeline.
-10. **Regression evaluation** — a small labelled synthetic fixture set checks whether deterministic rules continue to produce expected triage categories; it is not a production accuracy benchmark.
-11. **Temporal replay** — a seeded CLI scenario applies an explicit as-of cutoff, withholds later events, and verifies that returned evidence IDs are drawn only from events visible at that time.
+8. **Prometheus metric context** — when configured, the API runs bounded, read-only Prometheus range queries for an incident time window using operator-supplied PromQL templates. Returned series are context, not causal proof.
+9. **OTLP ingestion** — `/v1/logs` maps OTLP/HTTP JSON resource attributes, severity, timestamps, trace IDs, and deployment metadata into the same validated event/correlation path. A request is capped at 500 records.
+10. **Dashboard** — the Next.js app reads the incident list, submits sample events, and loads an incident evidence timeline.
+11. **Regression evaluation** — a small labelled synthetic fixture set checks whether deterministic rules continue to produce expected triage categories; it is not a production accuracy benchmark.
+12. **Temporal replay** — a seeded CLI scenario applies an explicit as-of cutoff, withholds later events, and verifies that returned evidence IDs are drawn only from events visible at that time.
 
 ## Important behavior and trade-offs
 
@@ -28,6 +29,9 @@ The MVP intentionally prioritizes a reproducible path from an event to a visible
 
 ## Planned evolution
 
+### Prometheus metric context
+The metrics adapter calls the configured Prometheus HTTP API using a range query for an incident window. Operators provide one to eight PromQL templates because metric names and label conventions vary between applications. The adapter substitutes escaped service/environment values, limits response series and samples, applies a short request timeout, and never changes alert state. Missing configuration is reported explicitly rather than fabricating metrics.
+
 ### External alert intake
 The Alertmanager adapter consumes webhook JSON rather than polling Prometheus. Firing alerts are mapped from labels, annotations, start time, generator URL, and fingerprint into the shared event pipeline. Resolved alerts are reported as ignored notifications and require an operator to close the incident; this avoids treating a delivery as proof that all related symptoms have recovered. The shared token is a minimal integration guard, not a replacement for network controls, TLS, rotation, or a full authentication model.
 
@@ -35,7 +39,7 @@ The Alertmanager adapter consumes webhook JSON rather than polling Prometheus. F
 Introduce stable evidence records for logs, traces, metrics, deployment events, source revisions, runbooks, and historical incidents. Each record should preserve source, timestamp, tenant, service, and retrieval metadata.
 
 ### Investigation engine (partial)
-An optional OpenAI adapter is available when OPENAI_API_KEY is configured. The current adapter sends incident metadata and a bounded set of stored events, requests JSON hypotheses, and rejects hypotheses that do not cite valid stored event IDs. If the provider fails, the API falls back to deterministic heuristics. The model does not yet query metrics, traces, deployment history, or service topology. Next steps include a provider-neutral interface, richer schema validation, counter-evidence, and reproducible model evaluation.
+An optional OpenAI adapter is available when OPENAI_API_KEY is configured. The current adapter sends incident metadata and a bounded set of stored events, requests JSON hypotheses, and rejects hypotheses that do not cite valid stored event IDs. If the provider fails, the API falls back to deterministic heuristics. The model does not yet consume Prometheus metric responses directly, query traces, or inspect service topology; metric context is exposed through a separate read-only endpoint. Next steps include a provider-neutral interface, richer schema validation, counter-evidence, and reproducible model evaluation.
 
 ### Evaluation
 A six-case labelled regression dataset and CLI evaluator now exist for deterministic triage rules. A separate as-of replay fixture verifies that a later event is excluded from investigation evidence. These checks are regression guards only, not production accuracy. Next, create diverse labelled incident scenarios and replay them with a time cutoff. The investigator must not see events or deployment data that arrived after the simulated investigation time. Publish dataset version, baseline, trial count, metric definitions, and known limitations with any score.

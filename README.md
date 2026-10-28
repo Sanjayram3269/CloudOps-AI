@@ -5,12 +5,13 @@
 
 CloudOps AI is an early-stage incident intelligence platform focused on turning noisy application events into traceable incidents and evidence-linked investigation hypotheses. The project is being built around a practical engineering principle: an incident explanation should point back to the observations that support it.
 
-**Status: early MVP with an authenticated external-alert ingestion path.** Event ingestion, deterministic incident correlation, SQLite persistence, the Next.js dashboard, evidence-linked baseline triage, optional OpenAI-backed hypothesis generation, and configurable GitHub issue creation are implemented. OpenTelemetry ingestion, a richer evidence graph, replay-based evaluation, multi-tenant production controls, and AWS deployment remain planned work.
+**Status: early MVP with an authenticated external-alert ingestion path.** Event ingestion, deterministic incident correlation, SQLite persistence, the Next.js dashboard, evidence-linked baseline triage, optional OpenAI-backed hypothesis generation, and configurable GitHub issue creation are implemented. Prometheus metric context is supported when configured. A richer evidence graph, multi-tenant production controls, and AWS deployment remain planned work.
 
 ## What works today
 - **Operational incident queue controls** with live search, status/severity filters, and lifecycle actions to mark incidents investigating, resolve them, or reopen them without leaving the dashboard.
 
 - **Event ingestion API** with Pydantic validation, timezone-aware timestamps, severity, service, environment, trace/deployment identifiers, and attributes.
+- **Read-only Prometheus metric context** for incidents via configurable PromQL range-query templates; returns bounded time series around the incident window and never treats correlation as proof of cause.
 - **Prometheus Alertmanager webhook ingestion** at `/api/v1/integrations/alertmanager`, with bearer-token verification, bounded payloads, alert labels/annotations, timestamps, source URLs, and safe handling of resolved notifications.
 - **OTLP/HTTP JSON logs ingestion** at `/v1/logs` (plus a namespaced alias), mapping OpenTelemetry resource, scope, severity, timestamp, trace, and attribute fields into the normal correlation pipeline. Requests are capped at 500 records.
 - **Deterministic event fingerprinting** that normalizes common high-cardinality values before hashing.
@@ -187,6 +188,18 @@ curl -X POST http://localhost:8000/v1/logs \
 
 The endpoint returns accepted-record counts and the incident IDs assigned by the normal correlation engine. The adapter currently supports OTLP JSON logs, not OTLP protobuf, traces, or metrics. An optional Collector pipeline example is in `examples/otel-collector.yaml`; its `api:8000` endpoint assumes the collector joins the same Compose network as the API.
 
+### Query Prometheus metrics for an incident
+
+Configure `CLOUDOPS_PROMETHEUS_URL` and `CLOUDOPS_PROMETHEUS_QUERIES` in the API environment. The query configuration is a JSON object with one to eight named PromQL templates. Use `{service}` and `{environment}` placeholders inside quoted PromQL label values; CloudOps AI escapes those values before substitution. Example:
+
+~~~bash
+export CLOUDOPS_PROMETHEUS_URL=http://localhost:9090
+export CLOUDOPS_PROMETHEUS_QUERIES='{"request_rate":"sum(rate(http_requests_total{service=\"{service}\",environment=\"{environment}\"}[5m]))","up":"min(up{job=\"{service}\"})"}'
+curl "http://localhost:8000/api/v1/incidents/1/metrics?lookback_minutes=30"
+~~~
+
+The endpoint uses Prometheus `/api/v1/query_range`, caps configured templates at eight, returns at most ten series and 120 samples per series, and times out each request after four seconds. Metric names and label conventions differ by deployment, so operators must configure queries that match their instrumentation. This integration is read-only and does not modify alert state.
+
 ### Record a deployment
 
 ~~~bash
@@ -207,7 +220,11 @@ curl -X POST http://localhost:8000/api/v1/deployments \
 
 Incident details and investigations include matching deployments from the same service/environment within one hour before through five minutes after the incident's first event. This is temporal context only; it does not establish that a deployment caused the incident. Re-sending the same service/environment/deployment ID updates the existing deployment record.
 
-## Runtime snapshots\n\nEvery GitHub Actions run starts the API and dashboard, sends a bearer-token-authenticated Alertmanager webhook into the running API, verifies the incident appears in the UI, and uploads a full-page dashboard screenshot as the `cloudops-dashboard-runtime-snapshot` artifact. Open [GitHub Actions](https://github.com/Sanjayram3269/CloudOps-AI/actions), select a successful run, and download the artifact. The screenshot is generated from a live app process and a real HTTP ingestion flow using a CI-only test alert; it is not a production telemetry capture or proof of production RCA accuracy. Artifacts are retained for 14 days.\n\n## API endpoints
+## Runtime snapshots
+
+Every GitHub Actions run starts the API and dashboard, sends a bearer-token-authenticated Alertmanager webhook into the running API, verifies the incident appears in the UI, and uploads a full-page dashboard screenshot as the `cloudops-dashboard-runtime-snapshot` artifact. Open [GitHub Actions](https://github.com/Sanjayram3269/CloudOps-AI/actions), select a successful run, and download the artifact. The screenshot is generated from a live app process and a real HTTP ingestion flow using a CI-only test alert; it is not a production telemetry capture or proof of production RCA accuracy. Artifacts are retained for 14 days.
+
+## API endpoints
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -216,6 +233,8 @@ Incident details and investigations include matching deployments from the same s
 | POST | /api/v1/integrations/alertmanager | Authenticated Prometheus Alertmanager webhook intake (requires shared token) |
 | GET | /api/v1/incidents | List recent incidents |
 | GET | /api/v1/incidents/{id} | Retrieve incident and stored event evidence |
+| GET | /api/v1/incidents/{id}/metrics | Query configured Prometheus metric context for an incident |
+| GET | /api/v1/incidents/{id}/metrics | Query configured Prometheus metric context for an incident |
 | PATCH | /api/v1/incidents/{id}/status | Change incident status |
 | POST | /api/v1/incidents/{id}/investigate | Generate evidence-linked hypotheses; use OpenAI when configured, otherwise deterministic triage |
 | POST | /api/v1/incidents/{id}/github-issue | Create or reuse a structured GitHub issue (requires explicit credentials) |
@@ -230,6 +249,10 @@ Copy .env.example to .env if you want to keep local settings in one place. Envir
 | CLOUDOPS_CORS_ORIGINS | http://localhost:3000 | Comma-separated allowed browser origins |
 | CLOUDOPS_CORRELATION_WINDOW_SECONDS | 300 | Maximum time gap for grouping matching events |
 | CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN | unset | Required bearer token for Alertmanager webhook intake; endpoint disabled when unset |
+| CLOUDOPS_PROMETHEUS_URL | unset | Base URL of a trusted Prometheus HTTP API |
+| CLOUDOPS_PROMETHEUS_QUERIES | unset | JSON object of named PromQL range-query templates; use `{service}` and `{environment}` placeholders |
+| CLOUDOPS_PROMETHEUS_URL | unset | Base URL of a trusted Prometheus HTTP API |
+| CLOUDOPS_PROMETHEUS_QUERIES | unset | JSON object of named PromQL range-query templates; use `{service}` and `{environment}` placeholders |
 | NEXT_PUBLIC_API_BASE_URL | http://localhost:8000 | API base URL used by the web client |
 
 OPENAI_API_KEY enables optional LLM-assisted investigation; OPENAI_MODEL defaults to gpt-4.1-mini. Without a key, the API uses deterministic heuristics. GITHUB_TOKEN and GITHUB_REPOSITORY (owner/repo) enable optional issue creation. Never commit real credentials. The API currently has no authentication, so keep it local; do not expose configured write credentials on a public instance.
@@ -284,7 +307,8 @@ The current tests cover health, event validation/correlation, service isolation,
 
 ### Phase 2 — Context-aware investigation
 - [x] OpenTelemetry-compatible OTLP/HTTP JSON log ingestion
-- [ ] Collector example, traces/metrics ingestion, and protobuf transport
+- [ ] Collector example, traces ingestion, and protobuf transport
+- [x] Read-only Prometheus range-query integration with configurable metric templates
 - [ ] Prometheus query client for live metric context and alert lifecycle reconciliation
 - [x] Deployment event intake, commit SHA capture, and nearby deployment context
 - [ ] Service/dependency context and evidence graph

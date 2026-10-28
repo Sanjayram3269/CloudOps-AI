@@ -318,3 +318,63 @@ def test_alertmanager_rejects_invalid_payload_and_naive_timestamp(tmp_path, monk
         assert client.post("/api/v1/integrations/alertmanager", json={}, headers=headers).status_code == 422
         payload = {"alerts": [{"status": "firing", "labels": {"alertname": "BadTimestamp", "service": "api"}, "annotations": {"summary": "failure"}, "startsAt": "2026-10-28T09:30:00"}]}
         assert client.post("/api/v1/integrations/alertmanager", json=payload, headers=headers).status_code == 422
+
+
+def test_prometheus_metrics_requires_configuration(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "prometheus.db"))
+    monkeypatch.delenv("CLOUDOPS_PROMETHEUS_URL", raising=False)
+    monkeypatch.delenv("CLOUDOPS_PROMETHEUS_QUERIES", raising=False)
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        response = client.get(f"/api/v1/incidents/{created.json()['incident_id']}/metrics")
+        assert response.status_code == 503
+
+
+def test_prometheus_metrics_queries_configured_backend(tmp_path, monkeypatch):
+    import json
+    from unittest.mock import patch
+    from urllib.parse import parse_qs, urlparse
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "prometheus.db"))
+    monkeypatch.setenv("CLOUDOPS_PROMETHEUS_URL", "http://prometheus.test")
+    monkeypatch.setenv("CLOUDOPS_PROMETHEUS_QUERIES", json.dumps({
+        "request_rate": 'sum(rate(http_requests_total{service="{service}",environment="{environment}"}[5m]))'
+    }))
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        incident_id = created.json()["incident_id"]
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self):
+                return json.dumps({"status": "success", "data": {"resultType": "matrix", "result": [{
+                    "metric": {"service": "checkout-api"},
+                    "values": [[1793179800, "12.5"], [1793179860, "18.0"]]
+                }]}}).encode()
+        with patch("backend.app.prometheus_metrics.urlopen", return_value=FakeResponse()) as mocked:
+            response = client.get(f"/api/v1/incidents/{incident_id}/metrics?lookback_minutes=15")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source"] == "prometheus"
+        assert body["query_count"] == 1
+        assert body["queries"][0]["name"] == "request_rate"
+        assert len(body["queries"][0]["series"]) == 1
+        assert body["queries"][0]["series"][0]["values"][1][1] == "18.0"
+        request_url = mocked.call_args.args[0].full_url
+        parsed = parse_qs(urlparse(request_url).query)
+        assert "/api/v1/query_range?" in request_url
+        assert 'service="checkout-api"' in parsed["query"][0]
+        assert 'environment="test"' in parsed["query"][0]
+
+
+def test_prometheus_metrics_rejects_invalid_query_config(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "prometheus-invalid.db"))
+    monkeypatch.setenv("CLOUDOPS_PROMETHEUS_URL", "http://prometheus.test")
+    monkeypatch.setenv("CLOUDOPS_PROMETHEUS_QUERIES", json.dumps({"": "up"}))
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        response = client.get(f"/api/v1/incidents/{created.json()['incident_id']}/metrics")
+        assert response.status_code == 503

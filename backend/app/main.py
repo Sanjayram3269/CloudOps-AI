@@ -16,6 +16,7 @@ from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
 from backend.app.otel_ingestion import parse_otlp_logs
 from backend.app.alertmanager import parse_alertmanager_payload
+from backend.app.prometheus_metrics import PrometheusConfigurationError, PrometheusQueryError, query_incident_metrics
 from backend.app.github_issues import GitHubIssueConfigurationError, GitHubIssueError, create_or_get_github_issue
 from backend.app.schemas import DeploymentIn, EventIn, IncidentStatus
 
@@ -181,3 +182,21 @@ def ingest_alertmanager(
         "resolved_notifications_ignored": resolved_count,
         "items": results,
     }
+
+
+@app.get("/api/v1/incidents/{incident_id}/metrics")
+def incident_metrics(
+    incident_id: int,
+    lookback_minutes: int = Query(default=30, ge=1, le=240),
+) -> dict[str, Any]:
+    """Fetch configured read-only Prometheus range queries around an incident."""
+    incident = database.get_incident(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    try:
+        context = query_incident_metrics(incident, lookback_minutes=lookback_minutes)
+    except PrometheusConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except PrometheusQueryError as exc:
+        raise HTTPException(status_code=502, detail="Prometheus query failed") from exc
+    return {"incident_id": incident_id, **context}
