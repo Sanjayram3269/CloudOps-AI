@@ -60,7 +60,9 @@ def query_incident_metrics(
     incident_time = datetime.fromisoformat(str(incident["last_seen"]).replace("Z", "+00:00"))
     if incident_time.tzinfo is None:
         incident_time = incident_time.replace(tzinfo=timezone.utc)
-    end_dt = max(current, incident_time)
+    # Anchor the query to the incident last event, allow a small recovery window,
+    # and never query beyond the present.
+    end_dt = min(current, incident_time + timedelta(minutes=5))
     start_dt = end_dt - timedelta(minutes=lookback_minutes)
     start, end = start_dt.timestamp(), end_dt.timestamp()
     step = max(15, min(60, int((end - start) / 120) or 15))
