@@ -16,6 +16,13 @@ type Investigation = {
   limitations: string[];
 };
 type ApiResult = { items: Incident[]; count: number };
+type MetricContext = {
+  source: string;
+  window: { start: string; end: string; step_seconds: number };
+  query_count: number;
+  queries: { name: string; promql: string; result_type: string; series: { metric: Record<string, string>; values: [number, string][] }[]; series_count_returned: number }[];
+  limitations: string[];
+};
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 function timeAgo(value: string) {
@@ -37,6 +44,8 @@ export default function Home() {
   const [issueNotice, setIssueNotice] = useState<{ number: number; url: string } | null>(null);
   const [timelines, setTimelines] = useState<Record<number, { evidence: { event_id: number; occurred_at: string; service: string; severity: string; message: string; trace_id?: string | null; deployment_id?: string | null }[]; related_deployments: { id: number; deployment_id: string; version?: string | null; commit_sha?: string | null; actor?: string | null; outcome: string; deployed_at: string }[] }>>({});
   const [timelineBusy, setTimelineBusy] = useState<number | null>(null);
+  const [metricBusy, setMetricBusy] = useState<number | null>(null);
+  const [metricContexts, setMetricContexts] = useState<Record<number, MetricContext>>({});
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
@@ -107,6 +116,21 @@ export default function Home() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load incident evidence.");
     } finally { setTimelineBusy(null); }
+  }
+
+  async function loadMetricContext(incidentId: number) {
+    setMetricBusy(incidentId);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/incidents/${incidentId}/metrics?lookback_minutes=30`, { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "Could not load Prometheus metrics.");
+      setMetricContexts((current) => ({ ...current, [incidentId]: body as MetricContext }));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load Prometheus metrics.");
+    } finally {
+      setMetricBusy(null);
+    }
   }
 
   async function updateStatus(incidentId: number, status: Incident["status"]) {
@@ -210,6 +234,7 @@ export default function Home() {
                       <div className="row-actions">
                         <button className="mini-button" onClick={() => void runInvestigation(incident.id)} disabled={actionBusy !== null}>{actionBusy === incident.id ? "Working…" : "Investigate"}</button>
                         <button className="mini-button mini-button-secondary" onClick={() => void loadTimeline(incident.id)} disabled={timelineBusy !== null}>{timelineBusy === incident.id ? "Loading…" : timelines[incident.id] ? "Refresh timeline" : "Evidence timeline"}</button>
+                        <button className="mini-button mini-button-secondary" onClick={() => void loadMetricContext(incident.id)} disabled={metricBusy !== null}>{metricBusy === incident.id ? "Querying…" : metricContexts[incident.id] ? "Refresh metrics" : "Metric context"}</button>
                         <button className="mini-button mini-button-secondary" onClick={() => void createIssue(incident.id)} disabled={actionBusy !== null}>Create GitHub issue</button>
                         {incident.status !== "investigating" && incident.status !== "resolved" && <button className="mini-button mini-button-secondary" onClick={() => void updateStatus(incident.id, "investigating")} disabled={statusBusy !== null}>{statusBusy === incident.id ? "Saving…" : "Mark investigating"}</button>}
                         {incident.status !== "resolved" && <button className="mini-button mini-button-resolve" onClick={() => void updateStatus(incident.id, "resolved")} disabled={statusBusy !== null}>{statusBusy === incident.id ? "Saving…" : "Resolve incident"}</button>}
@@ -238,6 +263,27 @@ export default function Home() {
                               ))}
                             </div>
                           )}
+                        </div>
+                      )}
+                      {metricContexts[incident.id] && (
+                        <div className="timeline-result">
+                          <div className="investigation-heading">PROMETHEUS METRIC CONTEXT · {metricContexts[incident.id].query_count} QUERIES</div>
+                          <div className="timeline-meta">{new Date(metricContexts[incident.id].window.start).toLocaleString()} – {new Date(metricContexts[incident.id].window.end).toLocaleString()} · {metricContexts[incident.id].window.step_seconds}s step</div>
+                          {metricContexts[incident.id].queries.map((query) => (
+                            <div className="deployment-event" key={query.name}>
+                              <strong>{query.name}</strong>
+                              <span className="hypothesis-score">{query.series_count_returned} series · {query.result_type}</span>
+                              <code className="metric-query">{query.promql}</code>
+                              {query.series.map((series, seriesIndex) => (
+                                <div className="timeline-meta" key={query.name + "-" + seriesIndex}>
+                                  {Object.entries(series.metric).map(([key, value]) => key + "=" + value).join(" · ") || "Unlabelled series"}
+                                  {" · "}{series.values.length} samples
+                                  {series.values.length > 0 ? " · latest " + series.values[series.values.length - 1][1] : " · no samples"}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                          {metricContexts[incident.id].limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
                         </div>
                       )}
                       {investigations[incident.id] && (
