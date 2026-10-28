@@ -1,0 +1,22 @@
+{
+  "receiver": "cloudops-ai",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "service": "checkout-api",
+        "environment": "staging",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "Checkout error rate exceeded threshold",
+        "description": "5xx rate stayed above threshold for five minutes"
+      },
+      "startsAt": "2026-10-28T09:30:00Z",
+      "generatorURL": "http://prometheus.example/graph",
+      "fingerprint": "example-alert-fingerprint"
+    }
+  ]
+}

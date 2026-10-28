@@ -21,7 +21,7 @@ This is an early-stage checklist, not a completed security review.
 
 | Risk | Current state | Required mitigation before production |
 |---|---|---|
-| Unauthenticated event ingestion | Present in MVP | Authentication, authorization, rate limits, request-size limits |
+| Unauthenticated event ingestion | General event/deployment APIs remain unauthenticated; Alertmanager webhook uses a shared bearer token | Authentication, authorization, rate limits, request-size limits, secret rotation |
 | Cross-tenant data exposure | No tenant model yet | Tenant identity on every row and query; isolation tests |
 | Sensitive values in event messages | Not automatically redacted | Redaction pipeline, configurable retention, restricted access |
 | Public exposure of API | No production perimeter | TLS, ingress policy, authentication, monitoring, abuse controls |
@@ -30,7 +30,7 @@ This is an early-stage checklist, not a completed security review.
 | Unauthorized GitHub actions | GitHub integration not implemented | Least-privilege tokens, explicit approval, idempotency, audit records |
 | Misleading root-cause confidence | Heuristic scores only | Label scores accurately; benchmark and calibrate before making accuracy claims |
 
-## Security rules
+| Shared webhook token leakage | Alertmanager uses a configured bearer token | TLS, secret manager, rotation, restricted network ingress, avoid logging authorization headers |\n\n## Security rules
 
 1. Never commit real credentials or production telemetry.
 2. Do not send sensitive logs to a third-party model until data handling, redaction, and provider retention are reviewed.

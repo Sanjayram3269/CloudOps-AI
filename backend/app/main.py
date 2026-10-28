@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from datetime import timezone
+import hmac
+import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -13,6 +15,7 @@ from backend.app.config import correlation_window_seconds, cors_origins
 from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
 from backend.app.otel_ingestion import parse_otlp_logs
+from backend.app.alertmanager import parse_alertmanager_payload
 from backend.app.github_issues import GitHubIssueConfigurationError, GitHubIssueError, create_or_get_github_issue
 from backend.app.schemas import DeploymentIn, EventIn, IncidentStatus
 
@@ -147,3 +150,34 @@ def ingest_deployment(payload: DeploymentIn) -> dict[str, Any]:
     deployment["deployed_at"] = deployment["deployed_at"].astimezone(timezone.utc).isoformat()
     deployment["outcome"] = deployment["outcome"].value
     return database.record_deployment(deployment)
+
+
+@app.post("/api/v1/integrations/alertmanager", status_code=202)
+def ingest_alertmanager(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Ingest real Prometheus Alertmanager webhook notifications.
+
+    Configure CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN before enabling this endpoint.
+    Resolved notifications are acknowledged but do not auto-close incidents.
+    """
+    expected = os.getenv("CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN", "")
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Alertmanager integration is disabled; configure CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN.",
+        )
+    if not hmac.compare_digest(authorization or "", f"Bearer {expected}"):
+        raise HTTPException(status_code=401, detail="Invalid Alertmanager webhook token")
+    try:
+        events, resolved_count = parse_alertmanager_payload(payload)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    results = [_persist_event(event) for event in events]
+    return {
+        "accepted": len(results),
+        "grouped": sum(1 for item in results if item["grouped_into_existing_incident"]),
+        "resolved_notifications_ignored": resolved_count,
+        "items": results,
+    }

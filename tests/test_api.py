@@ -259,3 +259,62 @@ def test_deployment_upsert_and_timezone_validation(tmp_path, monkeypatch):
         assert second.json()["version"] == "1.0.1"
         payload["deployed_at"] = "2026-10-28T12:00:00"
         assert client.post("/api/v1/deployments", json=payload).status_code == 422
+
+
+def test_alertmanager_webhook_requires_configured_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "alertmanager.db"))
+    monkeypatch.delenv("CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN", raising=False)
+    database.init_db()
+    with TestClient(app) as client:
+        response = client.post("/api/v1/integrations/alertmanager", json={"alerts": [{"status": "firing"}]})
+        assert response.status_code == 503
+
+
+def test_alertmanager_webhook_authenticates_and_ingests_real_alert_shape(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "alertmanager.db"))
+    monkeypatch.setenv("CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN", "test-webhook-secret")
+    database.init_db()
+    payload = {
+        "receiver": "cloudops-ai",
+        "status": "firing",
+        "alerts": [
+            {
+                "status": "firing",
+                "labels": {"alertname": "HighErrorRate", "service": "checkout-api", "environment": "staging", "severity": "critical"},
+                "annotations": {"summary": "Checkout error rate exceeded threshold", "description": "5xx rate stayed above 10 percent for 5 minutes"},
+                "startsAt": "2026-10-28T09:30:00Z",
+                "generatorURL": "http://prometheus.example/graph?g0.expr=up",
+                "fingerprint": "alert-fingerprint-123"
+            },
+            {
+                "status": "resolved",
+                "labels": {"alertname": "Recovered", "service": "checkout-api"},
+                "annotations": {"summary": "Recovered"},
+                "startsAt": "2026-10-28T09:20:00Z"
+            }
+        ]
+    }
+    with TestClient(app) as client:
+        unauthorized = client.post("/api/v1/integrations/alertmanager", json=payload)
+        assert unauthorized.status_code == 401
+        response = client.post("/api/v1/integrations/alertmanager", json=payload, headers={"Authorization": "Bearer test-webhook-secret"})
+        assert response.status_code == 202
+        body = response.json()
+        assert body["accepted"] == 1
+        assert body["resolved_notifications_ignored"] == 1
+        incident = client.get(f"/api/v1/incidents/{body['items'][0]['incident_id']}").json()
+        assert incident["service"] == "checkout-api"
+        assert incident["environment"] == "staging"
+        assert incident["severity"] == "critical"
+        assert incident["evidence"][0]["message"] == "Checkout error rate exceeded threshold"
+
+
+def test_alertmanager_rejects_invalid_payload_and_naive_timestamp(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "alertmanager-invalid.db"))
+    monkeypatch.setenv("CLOUDOPS_ALERTMANAGER_WEBHOOK_TOKEN", "test-webhook-secret")
+    database.init_db()
+    with TestClient(app) as client:
+        headers = {"Authorization": "Bearer test-webhook-secret"}
+        assert client.post("/api/v1/integrations/alertmanager", json={}, headers=headers).status_code == 422
+        payload = {"alerts": [{"status": "firing", "labels": {"alertname": "BadTimestamp", "service": "api"}, "annotations": {"summary": "failure"}, "startsAt": "2026-10-28T09:30:00"}]}
+        assert client.post("/api/v1/integrations/alertmanager", json=payload, headers=headers).status_code == 422
