@@ -112,3 +112,41 @@ def query_incident_metrics(
             "series_count_returned": len(series),
         })
     return context
+
+def summarize_metric_signals(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """Summarize first-to-last sample changes without inferring anomalies or causes."""
+    summaries: list[dict[str, Any]] = []
+    for query in context.get("queries", []):
+        if not isinstance(query, dict):
+            continue
+        for series in query.get("series", []):
+            if not isinstance(series, dict):
+                continue
+            numeric = []
+            for point in series.get("values", []):
+                if not isinstance(point, (list, tuple)) or len(point) < 2:
+                    continue
+                try:
+                    timestamp, value = float(point[0]), float(point[1])
+                except (TypeError, ValueError):
+                    continue
+                if timestamp != timestamp or value != value:
+                    continue
+                numeric.append((timestamp, value))
+            if not numeric:
+                continue
+            first_value, latest_value = numeric[0][1], numeric[-1][1]
+            change = latest_value - first_value
+            percent_change = round(change / abs(first_value) * 100, 2) if first_value else None
+            labels = series.get("metric", {})
+            summaries.append({
+                "query_name": str(query.get("name", "unnamed")),
+                "metric": labels if isinstance(labels, dict) else {},
+                "sample_count": len(numeric),
+                "first_value": first_value,
+                "latest_value": latest_value,
+                "absolute_change": round(change, 6),
+                "percent_change": percent_change,
+                "interpretation": "observed sample change only; no anomaly threshold or causal link is inferred",
+            })
+    return summaries[:80]

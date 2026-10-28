@@ -30,6 +30,9 @@ The MVP intentionally prioritizes a reproducible path from an event to a visible
 ## Planned evolution
 
 ### Prometheus metric context
+
+The investigation endpoint optionally queries this adapter and attaches bounded first-to-last sample summaries to its response. The summary reports observed values and percent change only; it does not infer anomalies, causal links, or adjust hypothesis confidence. Missing configuration or query failures are represented as status metadata and do not block baseline investigation.
+
 The metrics adapter calls the configured Prometheus HTTP API using a range query for an incident window. Operators provide one to eight PromQL templates because metric names and label conventions vary between applications. The adapter substitutes escaped service/environment values, limits response series and samples, applies a short request timeout, and never changes alert state. Missing configuration is reported explicitly rather than fabricating metrics.
 
 ### External alert intake

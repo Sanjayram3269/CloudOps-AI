@@ -14,6 +14,12 @@ type Investigation = {
   summary: string;
   hypotheses: { cause: string; confidence: number; rationale: string; evidence_event_ids: number[]; next_checks: string[] }[];
   limitations: string[];
+  metric_context?: {
+    status: "available" | "not_configured" | "unavailable";
+    query_count?: number;
+    signals: { query_name: string; metric: Record<string, string>; sample_count: number; first_value: number; latest_value: number; absolute_change: number; percent_change: number | null; interpretation: string }[];
+    limitations: string[];
+  };
 };
 type ApiResult = { items: Incident[]; count: number };
 type MetricContext = {
@@ -299,6 +305,21 @@ export default function Home() {
                             </div>
                           ))}
                           {investigations[incident.id].limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
+                          {investigations[incident.id].metric_context && (
+                            <div className="investigation-metrics">
+                              <div className="investigation-heading">LIVE METRIC EVIDENCE · {investigations[incident.id].metric_context.status.replace("_", " ").toUpperCase()}</div>
+                              {investigations[incident.id].metric_context.signals.map((signal, signalIndex) => (
+                                <div className="metric-signal" key={signal.query_name + "-" + signalIndex}>
+                                  <strong>{signal.query_name}</strong>
+                                  <span>{Object.entries(signal.metric).map(([key, value]) => key + "=" + value).join(" · ") || "Unlabelled series"}</span>
+                                  <span>{signal.first_value} → {signal.latest_value}{signal.percent_change !== null ? " · " + signal.percent_change + "% change" : " · baseline is zero"}</span>
+                                  <small>{signal.interpretation}</small>
+                                </div>
+                              ))}
+                              {investigations[incident.id].metric_context.signals.length === 0 && <p className="limitation">No numeric metric samples were available to summarize.</p>}
+                              {investigations[incident.id].metric_context.limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

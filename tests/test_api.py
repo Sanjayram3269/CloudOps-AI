@@ -378,3 +378,31 @@ def test_prometheus_metrics_rejects_invalid_query_config(tmp_path, monkeypatch):
         created = client.post("/api/v1/events", json=event())
         response = client.get(f"/api/v1/incidents/{created.json()['incident_id']}/metrics")
         assert response.status_code == 503
+
+
+def test_investigation_returns_graceful_metric_status_when_prometheus_is_not_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "investigation-metrics.db"))
+    monkeypatch.delenv("CLOUDOPS_PROMETHEUS_URL", raising=False)
+    monkeypatch.delenv("CLOUDOPS_PROMETHEUS_QUERIES", raising=False)
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        response = client.post(f"/api/v1/incidents/{created.json()['incident_id']}/investigate")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["method"] == "deterministic-baseline"
+        assert body["metric_context"]["status"] == "not_configured"
+        assert body["metric_context"]["signals"] == []
+
+
+def test_metric_signal_summary_reports_change_without_claiming_causality():
+    from backend.app.prometheus_metrics import summarize_metric_signals
+    summary = summarize_metric_signals({"queries": [{"name": "request_rate", "series": [
+        {"metric": {"service": "checkout-api"}, "values": [[1, "10"], [2, "15"], [3, "20"]]},
+        {"metric": {"service": "empty"}, "values": [[1, "NaN"]]}
+    ]}]})
+    assert len(summary) == 1
+    assert summary[0]["first_value"] == 10
+    assert summary[0]["latest_value"] == 20
+    assert summary[0]["percent_change"] == 100.0
+    assert "no anomaly threshold" in summary[0]["interpretation"]

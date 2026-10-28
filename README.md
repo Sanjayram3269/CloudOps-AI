@@ -11,7 +11,7 @@ CloudOps AI is an early-stage incident intelligence platform focused on turning 
 - **Operational incident queue controls** with live search, status/severity filters, and lifecycle actions to mark incidents investigating, resolve them, or reopen them without leaving the dashboard.
 
 - **Event ingestion API** with Pydantic validation, timezone-aware timestamps, severity, service, environment, trace/deployment identifiers, and attributes.
-- **Read-only Prometheus metric context** for incidents via configurable PromQL range-query templates; returns bounded time series around the incident window and never treats correlation as proof of cause.
+- **Read-only Prometheus metric context** via configurable PromQL templates; investigation responses can include bounded first-to-last sample summaries without claiming anomaly detection or causal proof.
 - **Prometheus Alertmanager webhook ingestion** at `/api/v1/integrations/alertmanager`, with bearer-token verification, bounded payloads, alert labels/annotations, timestamps, source URLs, and safe handling of resolved notifications.
 - **OTLP/HTTP JSON logs ingestion** at `/v1/logs` (plus a namespaced alias), mapping OpenTelemetry resource, scope, severity, timestamp, trace, and attribute fields into the normal correlation pipeline. Requests are capped at 500 records.
 - **Deterministic event fingerprinting** that normalizes common high-cardinality values before hashing.
@@ -309,7 +309,8 @@ The current tests cover health, event validation/correlation, service isolation,
 - [x] OpenTelemetry-compatible OTLP/HTTP JSON log ingestion
 - [ ] Collector example, traces ingestion, and protobuf transport
 - [x] Read-only Prometheus range-query integration with configurable metric templates
-- [ ] Prometheus query client for live metric context and alert lifecycle reconciliation
+- [x] Prometheus query client for live metric context in incident investigations
+- [ ] Alert lifecycle reconciliation
 - [x] Deployment event intake, commit SHA capture, and nearby deployment context
 - [ ] Service/dependency context and evidence graph
 - [ ] Provider-agnostic LLM adapter with schema-validated outputs
@@ -335,7 +336,7 @@ The current tests cover health, event validation/correlation, service isolation,
 
 ## Security and limitations
 
-This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. The LLM adapter redacts several common credential assignment patterns before sending log text, but that is not a comprehensive secret or PII scrubber. Do not connect it to sensitive production telemetry or expose it to the public internet without authentication, authorization, robust redaction, retention controls, rate limits, audit coverage, and a security review.
+This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. The investigation endpoint attaches configured Prometheus metric summaries when available; missing configuration or query failures do not block deterministic triage. Summaries report observed sample changes only, not anomalies or causal proof. The LLM adapter redacts several common credential assignment patterns before sending log text, but that is not a comprehensive secret or PII scrubber. Do not connect it to sensitive production telemetry or expose it to the public internet without authentication, authorization, robust redaction, retention controls, rate limits, audit coverage, and a security review.
 
 The deterministic fallback uses message-pattern heuristics. When enabled, the LLM receives redacted event messages and incident metadata; it does not inspect metrics, traces, deployments, source code, or external dependency state. Confidence values are heuristic/model-provided scores, not statistically calibrated probabilities. GitHub issue creation is an external side effect and must only be enabled in a trusted, authenticated environment.
 

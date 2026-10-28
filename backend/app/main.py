@@ -16,7 +16,7 @@ from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
 from backend.app.otel_ingestion import parse_otlp_logs
 from backend.app.alertmanager import parse_alertmanager_payload
-from backend.app.prometheus_metrics import PrometheusConfigurationError, PrometheusQueryError, query_incident_metrics
+from backend.app.prometheus_metrics import PrometheusConfigurationError, PrometheusQueryError, query_incident_metrics, summarize_metric_signals
 from backend.app.github_issues import GitHubIssueConfigurationError, GitHubIssueError, create_or_get_github_issue
 from backend.app.schemas import DeploymentIn, EventIn, IncidentStatus
 
@@ -124,6 +124,28 @@ def investigate_incident(incident_id: int) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Incident not found")
     result = investigate(incident, database.get_events(incident_id))
     result["deployment_context"] = database.get_related_deployments(incident_id)
+    try:
+        metric_context = query_incident_metrics(incident, lookback_minutes=30)
+        result["metric_context"] = {
+            "status": "available",
+            "source": metric_context["source"],
+            "window": metric_context["window"],
+            "query_count": metric_context["query_count"],
+            "signals": summarize_metric_signals(metric_context),
+            "limitations": metric_context["limitations"],
+        }
+    except PrometheusConfigurationError:
+        result["metric_context"] = {
+            "status": "not_configured",
+            "signals": [],
+            "limitations": ["Configure Prometheus to include live metric context in investigations."],
+        }
+    except PrometheusQueryError:
+        result["metric_context"] = {
+            "status": "unavailable",
+            "signals": [],
+            "limitations": ["Prometheus could not be queried; investigation continued without live metric context."],
+        }
     return result
 
 

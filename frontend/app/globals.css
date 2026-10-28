@@ -139,3 +139,8 @@ textarea:focus { border-color: #718e45; box-shadow: 0 0 0 2px rgba(199,243,107,.
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.investigation-metrics { margin-top: 14px; padding-top: 12px; border-top: 1px solid #252a31; }
+.metric-signal { display: grid; gap: 4px; margin: 8px 0; padding: 10px; border: 1px solid #252a31; border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
+.metric-signal span, .metric-signal small { color: #8c9bab; line-height: 1.5; }
+.metric-signal small { font-size: 11px; }
