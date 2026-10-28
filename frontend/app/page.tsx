@@ -37,6 +37,15 @@ export default function Home() {
   const [issueNotice, setIssueNotice] = useState<{ number: number; url: string } | null>(null);
   const [timelines, setTimelines] = useState<Record<number, { evidence: { event_id: number; occurred_at: string; service: string; severity: string; message: string; trace_id?: string | null; deployment_id?: string | null }[]; related_deployments: { id: number; deployment_id: string; version?: string | null; commit_sha?: string | null; actor?: string | null; outcome: string; deployed_at: string }[] }>>({});
   const [timelineBusy, setTimelineBusy] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState("all");
+  const [statusBusy, setStatusBusy] = useState<number | null>(null);
+  const filteredItems = items.filter((item) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [item.title, item.service, item.environment, String(item.id)].some((value) => value.toLowerCase().includes(query));
+    return matchesSearch && (statusFilter === "all" || item.status === statusFilter) && (severityFilter === "all" || item.severity === severityFilter);
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -100,6 +109,25 @@ export default function Home() {
     } finally { setTimelineBusy(null); }
   }
 
+  async function updateStatus(incidentId: number, status: Incident["status"]) {
+    setStatusBusy(incidentId);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/incidents/${incidentId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? "Status update failed.");
+      setItems((current) => current.map((item) => item.id === incidentId ? { ...item, status: body.status } : item));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Status update failed.");
+    } finally {
+      setStatusBusy(null);
+    }
+  }
+
   async function createIssue(incidentId: number) {
     setActionBusy(incidentId);
     setError("");
@@ -145,16 +173,35 @@ export default function Home() {
         <div className="panel incidents-panel">
           <div className="panel-heading">
             <div><div className="section-kicker">OPERATIONS</div><h2>Incident queue</h2></div>
-            <span className="count-pill">{items.length} total</span>
+            <span className="count-pill">{filteredItems.length} of {items.length}</span>
+          </div>
+          <div className="queue-tools">
+            <div className="queue-search">
+              <label htmlFor="incident-search">SEARCH INCIDENTS</label>
+              <input id="incident-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title, service, environment, or ID…" />
+            </div>
+            <div className="queue-filter">
+              <label htmlFor="status-filter">STATUS</label>
+              <select id="status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="all">All statuses</option><option value="open">Open</option><option value="investigating">Investigating</option><option value="resolved">Resolved</option>
+              </select>
+            </div>
+            <div className="queue-filter">
+              <label htmlFor="severity-filter">SEVERITY</label>
+              <select id="severity-filter" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
+                <option value="all">All severities</option><option value="critical">Critical</option><option value="error">Error</option><option value="warning">Warning</option><option value="info">Info</option>
+              </select>
+            </div>
+            {(search || statusFilter !== "all" || severityFilter !== "all") && <button className="text-button clear-filters" onClick={() => { setSearch(""); setStatusFilter("all"); setSeverityFilter("all"); }}>Clear filters</button>}
           </div>
           {error && <div className="error-banner" role="alert">{error}</div>}
           {issueNotice && <div className="success-banner">GitHub issue #{issueNotice.number} ready. <a href={issueNotice.url} target="_blank" rel="noreferrer">Open issue ↗</a></div>}
           {loading ? <div className="empty-state">Loading incident queue…</div> :
-            items.length === 0 ? (
-              <div className="empty-state"><div className="empty-symbol">⌁</div><strong>No incidents yet</strong><span>Send a sample event to create your first incident.</span></div>
+            filteredItems.length === 0 ? (
+              <div className="empty-state"><div className="empty-symbol">⌁</div><strong>No incidents yet</strong><span>{items.length === 0 ? "Send a sample event to create your first incident." : "Try another search or clear your filters."}</span></div>
             ) : (
               <div className="incident-list">
-                {items.map((incident) => (
+                {filteredItems.map((incident) => (
                   <article className="incident-row" key={incident.id}>
                     <div className={`severity-bar severity-${incident.severity}`} />
                     <div className="incident-main">
@@ -164,6 +211,9 @@ export default function Home() {
                         <button className="mini-button" onClick={() => void runInvestigation(incident.id)} disabled={actionBusy !== null}>{actionBusy === incident.id ? "Working…" : "Investigate"}</button>
                         <button className="mini-button mini-button-secondary" onClick={() => void loadTimeline(incident.id)} disabled={timelineBusy !== null}>{timelineBusy === incident.id ? "Loading…" : timelines[incident.id] ? "Refresh timeline" : "Evidence timeline"}</button>
                         <button className="mini-button mini-button-secondary" onClick={() => void createIssue(incident.id)} disabled={actionBusy !== null}>Create GitHub issue</button>
+                        {incident.status !== "investigating" && incident.status !== "resolved" && <button className="mini-button mini-button-secondary" onClick={() => void updateStatus(incident.id, "investigating")} disabled={statusBusy !== null}>{statusBusy === incident.id ? "Saving…" : "Mark investigating"}</button>}
+                        {incident.status !== "resolved" && <button className="mini-button mini-button-resolve" onClick={() => void updateStatus(incident.id, "resolved")} disabled={statusBusy !== null}>{statusBusy === incident.id ? "Saving…" : "Resolve incident"}</button>}
+                        {incident.status === "resolved" && <button className="mini-button mini-button-secondary" onClick={() => void updateStatus(incident.id, "open")} disabled={statusBusy !== null}>{statusBusy === incident.id ? "Saving…" : "Reopen incident"}</button>}
                       </div>
                       {timelines[incident.id] && (
                         <div className="timeline-result">

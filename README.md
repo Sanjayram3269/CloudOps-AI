@@ -8,6 +8,7 @@ CloudOps AI is an early-stage incident intelligence platform focused on turning 
 **Status: early MVP.** Event ingestion, deterministic incident correlation, SQLite persistence, the Next.js dashboard, evidence-linked baseline triage, optional OpenAI-backed hypothesis generation, and configurable GitHub issue creation are implemented. OpenTelemetry ingestion, a richer evidence graph, replay-based evaluation, multi-tenant production controls, and AWS deployment remain planned work.
 
 ## What works today
+- **Operational incident queue controls** with live search, status/severity filters, and lifecycle actions to mark incidents investigating, resolve them, or reopen them without leaving the dashboard.
 
 - **Event ingestion API** with Pydantic validation, timezone-aware timestamps, severity, service, environment, trace/deployment identifiers, and attributes.
 - **OTLP/HTTP JSON logs ingestion** at `/v1/logs` (plus a namespaced alias), mapping OpenTelemetry resource, scope, severity, timestamp, trace, and attribute fields into the normal correlation pipeline. Requests are capped at 500 records.
