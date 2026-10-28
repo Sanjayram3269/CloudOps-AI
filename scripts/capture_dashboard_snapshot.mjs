@@ -3,11 +3,13 @@ import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { createRequire } from "node:module";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const frontend = path.join(root, "frontend");
+const require = createRequire(path.join(frontend, "package.json"));
+const { chromium } = require("playwright");
 const artifactDir = path.join(root, "artifacts");
 const dbPath = path.join(artifactDir, "snapshot.db");
 const token = "ci-only-cloudops-snapshot-token";
