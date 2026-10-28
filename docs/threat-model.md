@@ -30,7 +30,9 @@ This is an early-stage checklist, not a completed security review.
 | Unauthorized GitHub actions | GitHub integration not implemented | Least-privilege tokens, explicit approval, idempotency, audit records |
 | Misleading root-cause confidence | Heuristic scores only | Label scores accurately; benchmark and calibrate before making accuracy claims |
 
-| Shared webhook token leakage | Alertmanager uses a configured bearer token | TLS, secret manager, rotation, restricted network ingress, avoid logging authorization headers |\n\n## Security rules
+| Shared webhook token leakage | Alertmanager uses a configured bearer token | TLS, secret manager, rotation, restricted network ingress, avoid logging authorization headers |
+
+## Security rules
 
 1. Never commit real credentials or production telemetry.
 2. Do not send sensitive logs to a third-party model until data handling, redaction, and provider retention are reviewed.

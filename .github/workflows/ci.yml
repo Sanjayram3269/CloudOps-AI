@@ -48,3 +48,30 @@ jobs:
         run: docker build -t cloudops-ai-api:test .
       - name: Build dashboard image
         run: docker build -t cloudops-ai-web:test ./frontend
+
+  runtime-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -r requirements.txt
+      - working-directory: frontend
+        run: npm install
+      - working-directory: frontend
+        run: npm install --no-save playwright
+      - working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run the API + dashboard and capture an integration snapshot
+        run: node scripts/capture_dashboard_snapshot.mjs
+      - name: Upload runtime dashboard snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudops-dashboard-runtime-snapshot
+          path: artifacts/cloudops-dashboard.png
+          if-no-files-found: error
+          retention-days: 14
