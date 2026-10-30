@@ -312,7 +312,8 @@ The current tests cover health, event validation/correlation, service isolation,
 - [x] Prometheus query client for live metric context in incident investigations
 - [ ] Alert lifecycle reconciliation
 - [x] Deployment event intake, commit SHA capture, and nearby deployment context
-- [ ] Service/dependency context and evidence graph
+- [x] Explainable evidence graph linking cited events, deployment context, metric signals, and hypotheses
+- [ ] Automated counter-evidence evaluation with validated domain-specific rules
 - [ ] Provider-agnostic LLM adapter with schema-validated outputs
 - [ ] Multiple hypotheses, counter-evidence, and calibrated evaluation
 
@@ -336,7 +337,7 @@ The current tests cover health, event validation/correlation, service isolation,
 
 ## Security and limitations
 
-This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. The investigation endpoint attaches configured Prometheus metric summaries when available; missing configuration or query failures do not block deterministic triage. Summaries report observed sample changes only, not anomalies or causal proof. The LLM adapter redacts several common credential assignment patterns before sending log text, but that is not a comprehensive secret or PII scrubber. Do not connect it to sensitive production telemetry or expose it to the public internet without authentication, authorization, robust redaction, retention controls, rate limits, audit coverage, and a security review.
+This is an early development project and is **not production-ready**. It currently has no user authentication or tenant isolation, and SQLite is intended for local development only. The investigation endpoint attaches configured Prometheus metric summaries when available; missing configuration or query failures do not block deterministic triage. Summaries report observed sample changes only, not anomalies or causal proof. Investigations also return an explainable evidence graph: cited events are distinct from deployment/metric context, and counter-evidence is marked not evaluated rather than guessed. The LLM adapter redacts several common credential assignment patterns before sending log text, but that is not a comprehensive secret or PII scrubber. Do not connect it to sensitive production telemetry or expose it to the public internet without authentication, authorization, robust redaction, retention controls, rate limits, audit coverage, and a security review.
 
 The deterministic fallback uses message-pattern heuristics. When enabled, the LLM receives redacted event messages and incident metadata; it does not inspect metrics, traces, deployments, source code, or external dependency state. Confidence values are heuristic/model-provided scores, not statistically calibrated probabilities. GitHub issue creation is an external side effect and must only be enabled in a trusted, authenticated environment.
 

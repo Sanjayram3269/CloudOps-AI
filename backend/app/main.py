@@ -14,6 +14,7 @@ from backend.app import database
 from backend.app.config import correlation_window_seconds, cors_origins
 from backend.app.correlation import fingerprint
 from backend.app.investigation import investigate
+from backend.app.evidence_graph import build_evidence_graph
 from backend.app.otel_ingestion import parse_otlp_logs
 from backend.app.alertmanager import parse_alertmanager_payload
 from backend.app.prometheus_metrics import PrometheusConfigurationError, PrometheusQueryError, query_incident_metrics, summarize_metric_signals
@@ -122,8 +123,10 @@ def investigate_incident(incident_id: int) -> dict[str, Any]:
     incident = database.get_incident(incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
-    result = investigate(incident, database.get_events(incident_id))
+    events = database.get_events(incident_id)
+    result = investigate(incident, events)
     result["deployment_context"] = database.get_related_deployments(incident_id)
+    deployments = result["deployment_context"]
     try:
         metric_context = query_incident_metrics(incident, lookback_minutes=30)
         result["metric_context"] = {
@@ -146,6 +149,10 @@ def investigate_incident(incident_id: int) -> dict[str, Any]:
             "signals": [],
             "limitations": ["Prometheus could not be queried; investigation continued without live metric context."],
         }
+    result["evidence_graph"] = build_evidence_graph(
+        result.get("hypotheses", []), events, deployments,
+        result.get("metric_context", {}).get("signals", []),
+    )
     return result
 
 

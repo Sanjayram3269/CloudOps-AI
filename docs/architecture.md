@@ -11,11 +11,12 @@ The MVP intentionally prioritizes a reproducible path from an event to a visible
 5. **Deployment context** — deployment events can be ingested with service, environment, deployment ID, version, commit SHA, actor, outcome, and timestamp. Incident detail and investigation responses include deployments near the incident start for the same service/environment; temporal proximity is context, not proof of cause.
 6. **Baseline triage** — a deterministic ruleset matches common message patterns and returns hypotheses with the event IDs that matched. This does not prove causality.
 7. **Alertmanager integration** — a bearer-token-protected webhook normalizes firing Prometheus Alertmanager notifications into validated events; resolved notifications are acknowledged but do not silently close incidents. The endpoint is disabled unless a shared token is configured.
-8. **Prometheus metric context** — when configured, the API runs bounded, read-only Prometheus range queries for an incident time window using operator-supplied PromQL templates. Returned series are context, not causal proof.
-9. **OTLP ingestion** — `/v1/logs` maps OTLP/HTTP JSON resource attributes, severity, timestamps, trace IDs, and deployment metadata into the same validated event/correlation path. A request is capped at 500 records.
-10. **Dashboard** — the Next.js app reads the incident list, submits sample events, and loads an incident evidence timeline.
-11. **Regression evaluation** — a small labelled synthetic fixture set checks whether deterministic rules continue to produce expected triage categories; it is not a production accuracy benchmark.
-12. **Temporal replay** — a seeded CLI scenario applies an explicit as-of cutoff, withholds later events, and verifies that returned evidence IDs are drawn only from events visible at that time.
+8. **Evidence graph** — investigation output links hypothesis citations to event nodes and adds deployment/metric nodes as contextual observations. It does not infer counter-evidence or causality.
+9. **Prometheus metric context** — when configured, the API runs bounded, read-only Prometheus range queries for an incident time window using operator-supplied PromQL templates. Returned series are context, not causal proof.
+10. **OTLP ingestion** — `/v1/logs` maps OTLP/HTTP JSON resource attributes, severity, timestamps, trace IDs, and deployment metadata into the same validated event/correlation path. A request is capped at 500 records.
+11. **Dashboard** — the Next.js app reads the incident list, submits sample events, and loads an incident evidence timeline.
+12. **Regression evaluation** — a small labelled synthetic fixture set checks whether deterministic rules continue to produce expected triage categories; it is not a production accuracy benchmark.
+13. **Temporal replay** — a seeded CLI scenario applies an explicit as-of cutoff, withholds later events, and verifies that returned evidence IDs are drawn only from events visible at that time.
 
 ## Important behavior and trade-offs
 
@@ -49,3 +50,8 @@ A six-case labelled regression dataset and CLI evaluator now exist for determini
 
 ### Production storage and services
 Move transactional state to PostgreSQL, add authenticated ingestion, background workers, retry/dead-letter handling, tenant-aware authorization, retention policies, rate limits, and audit events before exposing the service to real operational data.
+
+
+### Explainable evidence graph
+
+Each investigation includes event, deployment, metric-signal, and hypothesis nodes. Edges distinguish investigator-cited event evidence from temporal deployment context and observational metric context. Per-hypothesis assessments list cited event IDs and contextual node IDs. Counter-evidence is explicitly reported as not evaluated: absence of a citation is not contradiction, and metric movement or nearby deployment is not causal proof. Future counter-evidence support must use validated diagnostic rules and preserve provenance.

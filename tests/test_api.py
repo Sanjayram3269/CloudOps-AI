@@ -406,3 +406,37 @@ def test_metric_signal_summary_reports_change_without_claiming_causality():
     assert summary[0]["latest_value"] == 20
     assert summary[0]["percent_change"] == 100.0
     assert "no anomaly threshold" in summary[0]["interpretation"]
+
+
+def test_investigation_builds_explainable_evidence_graph(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDOPS_DB_PATH", str(tmp_path / "evidence-graph.db"))
+    monkeypatch.delenv("CLOUDOPS_PROMETHEUS_URL", raising=False)
+    monkeypatch.delenv("CLOUDOPS_PROMETHEUS_QUERIES", raising=False)
+    database.init_db()
+    with TestClient(app) as client:
+        created = client.post("/api/v1/events", json=event())
+        incident_id = created.json()["incident_id"]
+        response = client.post(f"/api/v1/incidents/{incident_id}/investigate")
+        assert response.status_code == 200
+        graph = response.json()["evidence_graph"]
+        assert graph["version"] == "1.0"
+        assert graph["summary"]["event_count"] == 1
+        assert graph["summary"]["hypothesis_count"] >= 1
+        assessment = graph["hypothesis_assessments"][0]
+        assert created.json()["event_id"] in assessment["supporting_event_ids"]
+        assert assessment["counter_evidence_status"] == "not_evaluated"
+        assert any(edge["relation"] == "supports_by_citation" for edge in graph["edges"])
+        assert any("not prove causality" in item for item in graph["limitations"])
+
+
+def test_evidence_graph_separates_citations_from_context():
+    from backend.app.evidence_graph import build_evidence_graph
+    graph = build_evidence_graph(
+        [{"cause": "Possible timeout", "evidence_event_ids": [1]}],
+        [{"event_id": 1, "message": "timeout", "occurred_at": "2026-10-31T00:00:00Z"}],
+        [{"deployment_id": "deploy-1", "deployed_at": "2026-10-31T00:01:00Z", "outcome": "succeeded"}],
+        [{"query_name": "request_rate", "latest_value": 12, "sample_count": 2}],
+    )
+    relations = {edge["relation"] for edge in graph["edges"]}
+    assert {"supports_by_citation", "temporal_context", "observational_context"} <= relations
+    assert graph["hypothesis_assessments"][0]["counter_evidence_ids"] == []
