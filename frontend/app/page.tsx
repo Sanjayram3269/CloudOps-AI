@@ -307,8 +307,8 @@ export default function Home() {
                           {investigations[incident.id].limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
                           {investigations[incident.id].metric_context && (
                             <div className="investigation-metrics">
-                              <div className="investigation-heading">LIVE METRIC EVIDENCE · {investigations[incident.id].metric_context.status.replace("_", " ").toUpperCase()}</div>
-                              {investigations[incident.id].metric_context.signals.map((signal, signalIndex) => (
+                              <div className="investigation-heading">LIVE METRIC EVIDENCE · {investigations[incident.id].metric_context?.status?.replace("_", " ").toUpperCase() ?? "UNKNOWN"}</div>
+                              {investigations[incident.id].metric_context?.signals?.map((signal, signalIndex) => (
                                 <div className="metric-signal" key={signal.query_name + "-" + signalIndex}>
                                   <strong>{signal.query_name}</strong>
                                   <span>{Object.entries(signal.metric).map(([key, value]) => key + "=" + value).join(" · ") || "Unlabelled series"}</span>
@@ -316,8 +316,8 @@ export default function Home() {
                                   <small>{signal.interpretation}</small>
                                 </div>
                               ))}
-                              {investigations[incident.id].metric_context.signals.length === 0 && <p className="limitation">No numeric metric samples were available to summarize.</p>}
-                              {investigations[incident.id].metric_context.limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
+                              {(investigations[incident.id].metric_context?.signals?.length ?? 0) === 0 && <p className="limitation">No numeric metric samples were available to summarize.</p>}
+                              {investigations[incident.id].metric_context?.limitations?.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
                             </div>
                           )}
                         </div>
