@@ -20,6 +20,11 @@ type Investigation = {
     signals: { query_name: string; metric: Record<string, string>; sample_count: number; first_value: number; latest_value: number; absolute_change: number; percent_change: number | null; interpretation: string }[];
     limitations: string[];
   };
+  evidence_graph?: {
+    summary: { event_count: number; deployment_count: number; metric_signal_count: number; hypothesis_count: number; edge_count: number };
+    hypothesis_assessments: { hypothesis_id: string; supporting_event_ids: number[]; contextual_evidence_ids: string[]; counter_evidence_status: string; assessment: string }[];
+    limitations: string[];
+  };
 };
 type ApiResult = { items: Incident[]; count: number };
 type MetricContext = {
@@ -318,6 +323,23 @@ export default function Home() {
                               ))}
                               {(investigations[incident.id].metric_context?.signals?.length ?? 0) === 0 && <p className="limitation">No numeric metric samples were available to summarize.</p>}
                               {investigations[incident.id].metric_context?.limitations?.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
+                            </div>
+                          )}
+                          {investigations[incident.id].evidence_graph && (
+                            <div className="investigation-metrics">
+                              <div className="investigation-heading">UNIFIED EVIDENCE GRAPH · {investigations[incident.id].evidence_graph.summary.edge_count} LINKS</div>
+                              <div className="timeline-meta">
+                                {investigations[incident.id].evidence_graph.summary.event_count} events · {investigations[incident.id].evidence_graph.summary.deployment_count} deployments · {investigations[incident.id].evidence_graph.summary.metric_signal_count} metric signals · {investigations[incident.id].evidence_graph.summary.hypothesis_count} hypotheses
+                              </div>
+                              {investigations[incident.id].evidence_graph.hypothesis_assessments.map((assessment) => (
+                                <div className="metric-signal" key={assessment.hypothesis_id}>
+                                  <strong>{assessment.hypothesis_id}</strong>
+                                  <span>Supporting event citations: {assessment.supporting_event_ids.length ? assessment.supporting_event_ids.map((id) => "#" + id).join(", ") : "None"}</span>
+                                  <span>Context links: {assessment.contextual_evidence_ids.length} · Counter-evidence: {assessment.counter_evidence_status.replace("_", " ")}</span>
+                                  <small>{assessment.assessment}</small>
+                                </div>
+                              ))}
+                              {investigations[incident.id].evidence_graph.limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
                             </div>
                           )}
                         </div>
