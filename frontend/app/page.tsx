@@ -327,11 +327,11 @@ export default function Home() {
                           )}
                           {investigations[incident.id].evidence_graph && (
                             <div className="investigation-metrics">
-                              <div className="investigation-heading">UNIFIED EVIDENCE GRAPH · {investigations[incident.id].evidence_graph.summary.edge_count} LINKS</div>
+                              <div className="investigation-heading">UNIFIED EVIDENCE GRAPH · {investigations[incident.id].evidence_graph?.summary.edge_count ?? 0} LINKS</div>
                               <div className="timeline-meta">
-                                {investigations[incident.id].evidence_graph.summary.event_count} events · {investigations[incident.id].evidence_graph.summary.deployment_count} deployments · {investigations[incident.id].evidence_graph.summary.metric_signal_count} metric signals · {investigations[incident.id].evidence_graph.summary.hypothesis_count} hypotheses
+                                {investigations[incident.id].evidence_graph?.summary.event_count ?? 0} events · {investigations[incident.id].evidence_graph?.summary.deployment_count ?? 0} deployments · {investigations[incident.id].evidence_graph?.summary.metric_signal_count ?? 0} metric signals · {investigations[incident.id].evidence_graph?.summary.hypothesis_count ?? 0} hypotheses
                               </div>
-                              {investigations[incident.id].evidence_graph.hypothesis_assessments.map((assessment) => (
+                              {investigations[incident.id].evidence_graph?.hypothesis_assessments?.map((assessment) => (
                                 <div className="metric-signal" key={assessment.hypothesis_id}>
                                   <strong>{assessment.hypothesis_id}</strong>
                                   <span>Supporting event citations: {assessment.supporting_event_ids.length ? assessment.supporting_event_ids.map((id) => "#" + id).join(", ") : "None"}</span>
@@ -339,7 +339,7 @@ export default function Home() {
                                   <small>{assessment.assessment}</small>
                                 </div>
                               ))}
-                              {investigations[incident.id].evidence_graph.limitations.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
+                              {investigations[incident.id].evidence_graph?.limitations?.map((limitation) => <div className="limitation" key={limitation}>{limitation}</div>)}
                             </div>
                           )}
                         </div>
