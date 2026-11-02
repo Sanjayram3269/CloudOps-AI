@@ -1,42 +1,34 @@
 # Initial Threat Model
 
-This is an early-stage checklist, not a completed security review.
+Status: Phase 0 baseline; not a completed security review | 2026-11-02
 
-## Assets to protect
-
-- Operational logs and traces, which may contain secrets, user identifiers, internal URLs, or customer data.
-- Incident evidence and investigation outputs.
-- Model-provider credentials and future GitHub integration tokens.
-- Incident state and any future external side effects.
+## Scope and assets
+CloudOps AI handles telemetry that may contain secrets, personal data, internal URLs and customer identifiers. Assets: telemetry/evidence; incidents and investigations; identities, sessions and memberships; ingestion/integration/model credentials; scenarios and runner outputs; audit history and customer configuration.
 
 ## Trust boundaries
+External producer → ingestion API; browser → web/API auth; identity → organization/workspace authorization; API/worker → PostgreSQL/queue; API/worker → model provider and external engineering systems; compiler → isolated runner; runner → test environment/artifact storage.
 
-- External event producers → API validation boundary.
-- Browser client → API origin and CORS boundary.
-- API → local database.
-- Future application → model provider.
-- Future application → GitHub or other engineering systems.
-
-## Current risks and limitations
-
-| Risk | Current state | Required mitigation before production |
+## Threat register
+| Threat | Impact | Required controls |
 |---|---|---|
-| Unauthenticated event ingestion | General event/deployment APIs remain unauthenticated; Alertmanager webhook uses a shared bearer token | Authentication, authorization, rate limits, request-size limits, secret rotation |
-| Cross-tenant data exposure | No tenant model yet | Tenant identity on every row and query; isolation tests |
-| Sensitive values in event messages | Not automatically redacted | Redaction pipeline, configurable retention, restricted access |
-| Public exposure of API | No production perimeter | TLS, ingress policy, authentication, monitoring, abuse controls |
-| SQLite durability/concurrency limits | Local-only storage | Managed PostgreSQL, backups, migration and recovery testing |
-| Model prompt injection via logs | Optional LLM receives untrusted log text as data; no tools are exposed | Keep logs clearly delimited as untrusted evidence, constrain outputs, validate cited evidence IDs, and test adversarial payloads |
-| Unauthorized GitHub actions | GitHub integration not implemented | Least-privilege tokens, explicit approval, idempotency, audit records |
-| Misleading root-cause confidence | Heuristic scores only | Label scores accurately; benchmark and calibrate before making accuracy claims |
+| Cross-tenant object access / IDOR | Data exposure or mutation | Server authorization on every request; adversarial isolation tests |
+| Forged ingestion identity | Misleading telemetry | Scoped credentials, rotation, TLS, rate limits, audit |
+| Secret leakage in telemetry | Infrastructure compromise | Redaction, restricted access, retention, secret scanning |
+| Session theft / CSRF | Unauthorized actions | Secure cookies, CSRF, expiry/revocation, rate limits |
+| Oversized/malicious payload | Resource exhaustion/parser risk | Strict schema, byte/record limits, timeouts |
+| Prompt injection in logs | Model manipulation | Untrusted-data boundary, no tools, schema and evidence validation |
+| Hallucinated causal claim | Incorrect response | Provenance, uncertainty, human confirmation, evaluation |
+| Malicious scenario | Host/environment compromise | Declarative schema, isolated runner, allowlists and quotas |
+| Unauthorized external side effect | Unapproved PR/deploy | Least privilege, explicit approval, idempotency, audit |
+| Worker tenant leakage | Cross-customer exposure | Explicit tenant context in every job/repository call |
+| Data loss | Lost incident history | Backups, restore drills, migration validation |
+| Supply-chain compromise | Malicious dependency/artifact | Dependency scanning, minimal permissions, release provenance |
 
-| Shared webhook token leakage | Alertmanager uses a configured bearer token | TLS, secret manager, rotation, restricted network ingress, avoid logging authorization headers |
+## Current MVP exposure
+General event, deployment and incident routes lack general authentication and tenant authorization. Alertmanager uses a shared configured bearer token. SQLite is local single-instance storage. Ingestion does not comprehensively redact telemetry. Optional model integration may process event text; provider data handling must be reviewed. GitHub issue creation is an external side effect. Scenario execution does not exist. Keep the MVP local/trusted and do not use production customer data.
 
-## Security rules
+## Phase 1 security invariants
+1. Deny by default without active membership. 2. Every tenant query/mutation is scoped by authorized workspace. 3. Workspace ID is a selector, not proof of access. 4. Ingestion keys are scoped, hashed, revocable and never logged. 5. Role/key changes are audited. 6. No cross-workspace foreign keys. 7. Telemetry is data, never instructions. 8. Model claims are not verified causes. 9. No production execution of generated scenarios/remediation. 10. Workers preserve explicit tenant context.
 
-1. Never commit real credentials or production telemetry.
-2. Do not send sensitive logs to a third-party model until data handling, redaction, and provider retention are reviewed.
-3. Treat all log text as untrusted input, not as instructions to an agent.
-4. Never execute remediation commands automatically in the initial product.
-5. Keep high-impact operations behind explicit human approval and record the decision.
-6. Add tests for authorization failures, malformed payloads, oversized input, replay protection, and secret redaction before production use.
+## Validation plan
+Authorization matrix; cross-tenant read/write/ID tests; key brute-force/rotation/revocation/expiry; CSRF/session lifecycle; payload size/parser/rate-limit/timeouts; secret redaction across logs/errors/model/issue content; prompt-injection fixtures; worker tenant context; scenario schema and sandbox escape tests before runner release; backup restore and deletion/export tests.

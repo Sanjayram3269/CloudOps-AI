@@ -1,57 +1,75 @@
-# Architecture Notes
+# Architecture — Current System and Target Platform
 
-## Current vertical slice
+Status: Phase 0 architecture baseline | Version 1.0 | 2026-11-02
 
-The MVP intentionally prioritizes a reproducible path from an event to a visible incident.
+## 1. Decision summary
+CloudOps AI is an early single-instance MVP. The target is a multi-tenant, evidence-first reliability platform with an incident-to-safeguard lifecycle. Target architecture is not shipped functionality. Phase 1 establishes the secure tenant foundation before customer data is used.
 
-1. **API boundary** — FastAPI accepts JSON and validates it with Pydantic. Invalid fields and timezone-naive timestamps are rejected before persistence.
-2. **Normalization and fingerprinting** — service, environment, and normalized message text are hashed to a stable fingerprint. Common high-cardinality values such as numbers, UUIDs, and hexadecimal addresses are normalized.
-3. **Correlation** — the API looks for a non-resolved incident with the same service, environment, and fingerprint whose last event falls inside the configured correlation window.
-4. **Persistence** — SQLite stores incident metadata and each event separately. Each event references its incident, preserving the evidence used for later investigation.
-5. **Deployment context** — deployment events can be ingested with service, environment, deployment ID, version, commit SHA, actor, outcome, and timestamp. Incident detail and investigation responses include deployments near the incident start for the same service/environment; temporal proximity is context, not proof of cause.
-6. **Baseline triage** — a deterministic ruleset matches common message patterns and returns hypotheses with the event IDs that matched. This does not prove causality.
-7. **Alertmanager integration** — a bearer-token-protected webhook normalizes firing Prometheus Alertmanager notifications into validated events; resolved notifications are acknowledged but do not silently close incidents. The endpoint is disabled unless a shared token is configured.
-8. **Evidence graph** — investigation output links hypothesis citations to event nodes and adds deployment/metric nodes as contextual observations. It does not infer counter-evidence or causality.
-9. **Prometheus metric context** — when configured, the API runs bounded, read-only Prometheus range queries for an incident time window using operator-supplied PromQL templates. Returned series are context, not causal proof.
-10. **OTLP ingestion** — `/v1/logs` maps OTLP/HTTP JSON resource attributes, severity, timestamps, trace IDs, and deployment metadata into the same validated event/correlation path. A request is capped at 500 records.
-11. **Dashboard** — the Next.js app reads the incident list, submits sample events, and loads an incident evidence timeline.
-12. **Regression evaluation** — a small labelled synthetic fixture set checks whether deterministic rules continue to produce expected triage categories; it is not a production accuracy benchmark.
-13. **Temporal replay** — a seeded CLI scenario applies an explicit as-of cutoff, withholds later events, and verifies that returned evidence IDs are drawn only from events visible at that time.
+## 2. Current implementation
+- FastAPI and Pydantic API.
+- SQLite persistence initialized by the application.
+- Event validation, normalization/fingerprinting and deterministic incident grouping.
+- Incident lifecycle and event evidence retrieval.
+- Deployment records and bounded temporal context.
+- Deterministic investigation plus optional OpenAI hypothesis generation.
+- Evidence graph for event, deployment, metric and hypothesis nodes.
+- Prometheus read-only metric context.
+- Alertmanager webhook protected by configured shared bearer token.
+- OTLP/HTTP JSON log ingestion.
+- Optional GitHub issue creation.
+- Replay and labelled synthetic baseline evaluation.
+- Next.js/React/TypeScript dashboard.
+- Docker Compose and GitHub Actions CI.
 
-## Important behavior and trade-offs
+### Current security and scale boundary
+General event, deployment and incident routes do not have general user authentication or tenant authorization. Alertmanager uses a configured shared token. SQLite is a local single-instance store. The frontend is a single operational dashboard, not an organization/workspace app. Keep the MVP local or on a trusted development network; do not represent it as production-ready for customer telemetry.
 
-- The local SQLite implementation is for a single-instance development environment, not multi-tenant production use.
-- Correlation is deliberately deterministic and explainable. It will miss incidents whose messages differ substantially, and it may group messages that normalize to the same fingerprint even when their causes differ.
-- The correlation window is configured with CLOUDOPS_CORRELATION_WINDOW_SECONDS; the default is 300 seconds.
-- The general event, deployment, and incident APIs do not authenticate callers. The Alertmanager webhook alone requires a configured bearer token. Keep the API local or on a trusted development network.
-- Investigation scores are heuristic ranking scores, not calibrated probabilities.
-- The current dashboard refreshes on demand; it does not yet use WebSockets or server-sent events.
-- Deployment correlation uses a one-hour lookback and five-minute lookahead around incident first-seen time. It deliberately does not claim causal attribution.
+## 3. Current event-to-investigation flow
+Producer sends CloudOps event, OTLP JSON log or Alertmanager webhook → FastAPI validates/normalizes → correlation fingerprints service/environment/message → SQLite persists incident/event → incident detail retrieves evidence/deployments → deterministic investigation and optional model adapter → model citations validated against stored event IDs → evidence graph labels citations/context → dashboard displays output. Replay/evaluation scripts guard selected regression behavior.
 
-## Planned evolution
+## 4. Target logical architecture
+### Ingestion plane
+Authenticated gateway; per-workspace ingestion credentials; rate/size limits; OTLP, Alertmanager, Prometheus and engineering adapters; schema versioning, deduplication, idempotency and provenance. Tenant identity comes from validated credentials, never untrusted event attributes.
 
-### Prometheus metric context
+### Core data plane
+PostgreSQL transactional system of record; tenant-aware repositories and authorization; immutable source evidence with retention/redaction; service catalogue/dependencies; incident correlation; versioned investigation, scenario, run and safeguard records; audit log and outbox for reliable background work.
 
-The investigation endpoint optionally queries this adapter and attaches bounded first-to-last sample summaries to its response. The summary reports observed values and percent change only; it does not infer anomalies, causal links, or adjust hypothesis confidence. Missing configuration or query failures are represented as status metadata and do not block baseline investigation.
+### Investigation plane
+Deterministic diagnostics; optional provider-neutral model adapter; tenant/time-bounded evidence retrieval; supporting, contradicting, contextual, missing and unassessed evidence; explicit uncertainty; replay with as-of cutoff and versioned evaluation datasets.
 
-The metrics adapter calls the configured Prometheus HTTP API using a range query for an incident window. Operators provide one to eight PromQL templates because metric names and label conventions vary between applications. The adapter substitutes escaped service/environment values, limits response series and samples, applies a short request timeout, and never changes alert state. Missing configuration is reported explicitly rather than fabricating metrics.
+### Prevention plane
+Compiler converts engineer-validated mechanism into declarative scenario; schema/static safety validation; isolated runner with allowlist, quotas, no ambient credentials and cleanup; safeguard proposal; human approval for external mutations; recurrence tracking.
 
-### External alert intake
-The Alertmanager adapter consumes webhook JSON rather than polling Prometheus. Firing alerts are mapped from labels, annotations, start time, generator URL, and fingerprint into the shared event pipeline. Resolved alerts are reported as ignored notifications and require an operator to close the incident; this avoids treating a delivery as proof that all related symptoms have recovered. The shared token is a minimal integration guard, not a replacement for network controls, TLS, rotation, or a full authentication model.
+### Experience plane
+Organization/workspace web app; service inventory, incident explorer, evidence graph, investigation, deployment history, scenario/safeguard review, collaboration, audit and integration controls.
 
-### Evidence model
-Introduce stable evidence records for logs, traces, metrics, deployment events, source revisions, runbooks, and historical incidents. Each record should preserve source, timestamp, tenant, service, and retrieval metadata.
+## 5. Proposed deployment
+Next.js web; stateless FastAPI; PostgreSQL; Redis-backed worker only when asynchronous workloads justify it; worker process; object storage for artifacts if needed; TLS ingress; secrets management and observability. Docker Compose remains local path. Kubernetes is not a prerequisite.
 
-### Investigation engine (partial)
-An optional OpenAI adapter is available when OPENAI_API_KEY is configured. The current adapter sends incident metadata and a bounded set of stored events, requests JSON hypotheses, and rejects hypotheses that do not cite valid stored event IDs. If the provider fails, the API falls back to deterministic heuristics. The model does not yet consume Prometheus metric responses directly, query traces, or inspect service topology; metric context is exposed through a separate read-only endpoint. Next steps include a provider-neutral interface, richer schema validation, counter-evidence, and reproducible model evaluation.
+## 6. Tenant boundary
+Organization owns security, membership and billing; Workspace is operational data boundary. Every workspace-owned row has workspace_id and relevant foreign keys. Every access derives scope from authenticated principal. Cross-workspace references are rejected. Repository methods require explicit tenant context. PostgreSQL RLS may add defense in depth after pooling and transaction context are tested.
 
-### Evaluation
-A six-case labelled regression dataset and CLI evaluator now exist for deterministic triage rules. A separate as-of replay fixture verifies that a later event is excluded from investigation evidence. These checks are regression guards only, not production accuracy. Next, create diverse labelled incident scenarios and replay them with a time cutoff. The investigator must not see events or deployment data that arrived after the simulated investigation time. Publish dataset version, baseline, trial count, metric definitions, and known limitations with any score.
+## 7. Reliability and consistency
+Ingestion idempotency; transactions protect incident/event consistency; outbox for reliable asynchronous side effects; idempotent workers with explicit tenant context; bounded exponential retries and dead-letter state; strict external API timeouts; model failure cannot block deterministic incident access; separate liveness and readiness.
 
-### Production storage and services
-Move transactional state to PostgreSQL, add authenticated ingestion, background workers, retry/dead-letter handling, tenant-aware authorization, retention policies, rate limits, and audit events before exposing the service to real operational data.
+## 8. Security
+Secure HttpOnly SameSite sessions and CSRF; scoped API/ingestion credentials; modern password hashing; deny-by-default authorization; hashed secrets, rotation and revocation; TLS and rate limits; telemetry is untrusted data; no autonomous production execution; isolated scenario runner; redaction/retention before third-party model processing. See threat-model.md.
 
+## 9. Technology decisions
+| Concern | Baseline | Decision rule |
+|---|---|---|
+| API | FastAPI/Pydantic | Preserve working contracts |
+| Web | Next.js/React/TypeScript | Workspace experience |
+| Shared store | PostgreSQL | Multi-user transactional persistence |
+| Local demo | SQLite may remain | Never shared multi-tenant production |
+| Background work | Redis + worker when needed | Add for real async/retry needs |
+| Evidence graph | Relational records/indexed edges | Graph DB only if query patterns justify |
+| Telemetry | OpenTelemetry/Prometheus | Vendor-neutral adapters |
+| AI | Optional provider-neutral adapter | Deterministic path remains functional |
+| Runtime | Docker Compose | Kubernetes only when needed |
 
-### Explainable evidence graph
+## 10. Migration strategy
+1. Freeze current behavior with characterization tests. 2. Add PostgreSQL and migration tooling while retaining SQLite local development. 3. Add users, organizations, workspaces and memberships. 4. Add workspace ownership to records/repositories. 5. Import existing SQLite incidents/events/deployments into a selected workspace. 6. Enforce auth on user-facing routes. 7. Add scoped ingestion/integration credentials. 8. Pass adversarial cross-tenant tests. 9. Migrate dashboard to authenticated workspaces. 10. Deprecate unscoped MVP routes through a documented compatibility window.
 
-Each investigation includes event, deployment, metric-signal, and hypothesis nodes. Edges distinguish investigator-cited event evidence from temporal deployment context and observational metric context. Per-hypothesis assessments list cited event IDs and contextual node IDs. Counter-evidence is explicitly reported as not evaluated: absence of a citation is not contradiction, and metric movement or nearby deployment is not causal proof. Future counter-evidence support must use validated diagnostic rules and preserve provenance.
+## 11. Open decisions
+Tenant boundary semantics; session/CSRF implementation; migration tooling and SQLite import; credential hashing/rotation; retention/deletion/export; worker/outbox; graph query/indexing; scenario runner isolation; model data governance and evaluation; topology freshness.

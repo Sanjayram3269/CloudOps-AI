@@ -1,5 +1,7 @@
 # CloudOps AI
-### Evidence-first incident intelligence for modern software systems
+### Evidence-first incident reconstruction and reliability learning
+
+> Turn production failures into verified safeguards — not just postmortems.
 
 > **Your monitoring tells you something broke. CloudOps AI helps you investigate why.**
 
@@ -28,11 +30,7 @@ CloudOps AI is an early-stage incident intelligence platform focused on turning 
 
 ## Product direction
 
-Production incidents rarely reveal their cause in one log line. A latency spike may be a downstream timeout; an error burst may follow a deployment; many alerts may describe one underlying failure.
-
-CloudOps AI is being designed as a vendor-neutral investigation layer that brings operational signals and engineering context together. Its longer-term goal is to correlate events, compare plausible failure hypotheses, gather supporting and contradictory evidence, and produce reviewable next steps.
-
-The differentiator is **not just asking an LLM to summarize logs**. It is making investigations inspectable and testable.
+CloudOps AI is evolving toward an evidence-first reliability engineering platform. Its intended loop is incident → evidence → engineer-validated failure mechanism → reproducible scenario → verified safeguard → recurrence tracking. This is the target direction, not a claim that every stage is implemented today. The current implementation remains the early MVP described above. See the product requirements, domain model/API contracts, architecture and acceptance strategy in the docs directory.
 
 ## Current architecture
 
