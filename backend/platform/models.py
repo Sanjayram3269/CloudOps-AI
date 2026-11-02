@@ -11,6 +11,8 @@ class OrganizationRole(str, enum.Enum):
     owner="owner"; admin="admin"; responder="responder"; viewer="viewer"
 class WorkspaceRole(str, enum.Enum):
     admin="admin"; responder="responder"; viewer="viewer"
+class InvitationRole(str, enum.Enum):
+    admin="admin"; responder="responder"; viewer="viewer"
 
 class User(Base):
     __tablename__="users"
@@ -63,7 +65,7 @@ class Invitation(Base):
     id: Mapped[uuid.UUID]=mapped_column(Uuid,primary_key=True,default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID]=mapped_column(ForeignKey("organizations.id",ondelete="CASCADE"),index=True)
     email: Mapped[str]=mapped_column(String(320),index=True)
-    role: Mapped[OrganizationRole]=mapped_column(Enum(OrganizationRole,name="invitation_role"),nullable=False)
+    role: Mapped[InvitationRole]=mapped_column(Enum(InvitationRole,name="invitation_role"),nullable=False)
     token_hash: Mapped[str]=mapped_column(String(128),unique=True)
     expires_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),nullable=False)
     accepted_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True))
